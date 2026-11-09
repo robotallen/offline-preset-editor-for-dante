@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<preset version="3.0.0">
+    <name>NBT</name>
+    <description>TEST</description>
+    <device>
+        <captureInfo>
+            <device_name/>
+            <device_samplerate/>
+            <device_encoding/>
+            <device_unicast_latency/>
+            <txchannel_names/>
+            <txflows/>
+            <rxchannel_names/>
+            <rxchannel_subscriptions/>
+            <rxflows/>
+        </captureInfo>
+        <name>Bluestream-4x4</name>
+        <samplerate>48000</samplerate>
+        <encoding>24</encoding>
+        <unicast_latency>1000</unicast_latency>
+        <txchannel danteId="1" mediaType="audio">
+            <label>OUT1</label>
+        </txchannel>
+        <txchannel danteId="2" mediaType="audio">
+            <label>OUT2</label>
+        </txchannel>
+        <txchannel danteId="3" mediaType="audio">
+            <label>OUT3</label>
+        </txchannel>
+        <txchannel danteId="4" mediaType="audio">
+            <label>OUT4</label>
+        </txchannel>
+        <rxchannel danteId="1" mediaType="audio">
+            <name>IN1</name>
+        </rxchannel>
+        <rxchannel danteId="2" mediaType="audio">
+            <name>IN2</name>
+        </rxchannel>
+        <rxchannel danteId="3" mediaType="audio">
+            <name>IN3</name>
+        </rxchannel>
+        <rxchannel danteId="4" mediaType="audio">
+            <name>IN4</name>
+        </rxchannel>
+    </device>
+</preset>

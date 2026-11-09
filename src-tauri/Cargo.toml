@@ -1,0 +1,23 @@
+[package]
+name = "dante-preset-editor"
+version = "1.0.0"
+description = "Offline editor for Audinate Dante Controller preset files"
+edition = "2021"
+
+[lib]
+name = "dante_preset_editor_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

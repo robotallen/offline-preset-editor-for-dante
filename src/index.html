@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offline Preset Editor for Dante</title>
+<style>
+/* Look and feel modelled on the conventions of Dante Controller (dark grey panels, teal pill buttons,
+   segmented tab bar, green crosspoint ticks) so it feels familiar alongside it. Original design: no Audinate artwork. */
+:root{
+  --bg:#1f1f1f; --bar:#151515; --panel:#282828; --panel2:#313131; --raise:#383838;
+  --line:#3a3a3a; --line2:#4b4b4b; --field:#1a1a1a;
+  --ink:#ececec; --muted:#9a9a9a; --dim:#6f6f6f;
+  --accent:#43b3b9; --accent-ink:#0d2526; --sel:rgba(67,179,185,.16); --hover:rgba(67,179,185,.09);
+  --ok:#4caf50; --warn:#e3a33b; --bad:#e5534b;
+  /* older names still used by a few rules */
+  --led:var(--accent); --rail:var(--raise); --rack:var(--field); --tape:var(--field); --tape-ink:var(--ink);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:13.5px/1.45 var(--font);display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+::selection{background:rgba(67,179,185,.4)}
+
+/* ---- top toolbar ---- */
+header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--bar);border-bottom:1px solid #000;flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;min-width:0;max-width:18em}
+.brand h1{font-size:15px;font-weight:600;margin:0;line-height:1.2;white-space:nowrap}
+.fileLabel{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.preset-meta{display:flex;gap:6px;flex:1;min-width:0}
+.preset-meta input{min-width:0;background:transparent;border:1px solid transparent;border-radius:3px;padding:4px 6px}
+.preset-meta input:hover{border-color:var(--line2)}
+.preset-meta input:focus{border-color:var(--accent);background:var(--field)}
+#presetName{font-weight:600;width:12em;flex-shrink:1}
+#presetDesc{flex:1;color:var(--muted);min-width:5em}
+.leader{display:flex;align-items:baseline;gap:6px;white-space:nowrap;padding:0 8px;font-size:13px}
+.leader span{color:var(--muted)}
+.leader b{font-weight:600;max-width:16em;overflow:hidden;text-overflow:ellipsis}
+.dirty{color:var(--warn);font-size:12px;white-space:nowrap}
+.btn{background:transparent;border:1.5px solid var(--accent);color:var(--ink);border-radius:999px;padding:4px 14px;cursor:pointer;white-space:nowrap;line-height:1.35}
+.btn:hover{background:var(--hover)}
+.btn:active{background:var(--sel)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.primary:hover{background:#56c4ca}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.small{padding:2px 11px;font-size:12.5px;border-width:1px}
+
+/* ---- view tabs: equal segments across the window ---- */
+.viewtabs{display:flex;background:var(--bar);border-bottom:1px solid #000}
+.viewtabs button{flex:1;background:none;border:none;border-right:1px solid #2a2a2a;padding:8px 10px;color:var(--muted);cursor:pointer;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.viewtabs button:last-child{border-right:none}
+.viewtabs button:hover:not(:disabled){color:var(--ink);background:#1d1d1d}
+.viewtabs button[aria-selected=true]{background:var(--panel);color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent)}
+.viewtabs button:disabled{color:var(--dim);cursor:default}
+
+/* ---- layout ---- */
+main{flex:1;display:flex;min-height:0}
+aside{width:250px;flex-shrink:0;background:#232323;border-right:1px solid #111;display:flex;flex-direction:column;min-height:0}
+.sidehead{display:flex;justify-content:space-between;align-items:center;padding:8px 12px 6px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line)}
+#devList{list-style:none;margin:0;padding:4px 0;overflow:auto;flex:1}
+#devList li{padding:5px 12px 5px 10px;cursor:pointer;display:grid;grid-template-columns:auto 1fr auto;column-gap:7px;align-items:center;border-left:3px solid transparent}
+#devList li:hover{background:var(--hover)}
+#devList li[aria-selected=true]{background:var(--sel);border-left-color:var(--accent)}
+#devList .dn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;grid-column:2}
+#devList .md{grid-column:2;color:var(--muted);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#devList .cnt{color:var(--muted);font-size:11.5px;white-space:nowrap;grid-column:3;grid-row:1;font-variant-numeric:tabular-nums}
+.warnDot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--bad);grid-column:1;grid-row:1}
+.sidefoot{padding:8px 12px;border-top:1px solid var(--line)}
+#issues{border-top:1px solid var(--line);max-height:36%;overflow:auto;padding:8px 12px;font-size:12px;background:#1d1d1d}
+#issues h2{font-size:12px;margin:0 0 6px;color:var(--muted);font-weight:600}
+#issues p{margin:0 0 5px}
+#issues .e{color:#ff8a83} #issues .w{color:var(--warn)} #issues .i{color:var(--muted)} #issues .none{color:var(--ok)}
+section#work{flex:1;overflow:auto;padding:16px 20px 36px;min-width:0;background:var(--bg)}
+
+/* ---- status bar ---- */
+.statusbar{display:flex;gap:18px;align-items:center;padding:4px 14px;background:var(--bar);border-top:1px solid #000;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden}
+.statusbar .sb-right{margin-left:auto;display:flex;align-items:center;gap:6px}
+.statusbar .sb-right::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.statusbar .sb-right.w::before{background:var(--warn)}
+.statusbar .sb-right.e::before{background:var(--bad)}
+
+/* ---- device view ---- */
+.devhead{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:4px}
+.devhead .tape{font-size:19px;font-weight:600;width:15em;max-width:100%;padding:4px 10px}
+.model{color:var(--muted);font-size:12.5px;margin-bottom:4px}
+label.chk{font-size:12.5px;color:var(--muted);display:flex;gap:6px;align-items:center;cursor:pointer}
+label.chk input{accent-color:var(--accent)}
+.tabs{display:flex;margin:12px 0 14px;background:var(--bar);border:1px solid #000;border-radius:4px;overflow:hidden;flex-wrap:wrap}
+.tabs button{flex:1;background:none;border:none;border-right:1px solid #2a2a2a;padding:7px 12px;cursor:pointer;color:var(--muted);white-space:nowrap}
+.tabs button:last-child{border-right:none}
+.tabs button:hover{color:var(--ink)}
+.tabs button[aria-selected=true]{color:var(--ink);background:var(--panel2);box-shadow:inset 0 -2px 0 var(--accent)}
+
+/* editable names: plain dark fields */
+.tape{background:var(--field);color:var(--ink);border:1px solid var(--line2);border-radius:3px;padding:3px 8px;font-weight:500;min-width:0}
+.tape:hover{border-color:#5d5d5d}
+.tape:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 2px rgba(67,179,185,.25)}
+.tape.bad{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad)}
+
+.cols{display:grid;grid-template-columns:minmax(220px,1fr) minmax(420px,2fr);gap:24px}
+@media (max-width:1100px){.cols{grid-template-columns:1fr}}
+.cols>div{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px 12px}
+h3{font-size:13px;font-weight:600;color:var(--ink);margin:0 0 8px}
+table{border-collapse:collapse;width:100%}
+td,th{padding:3px 6px;text-align:left;vertical-align:middle}
+th{font-weight:500;color:var(--muted);font-size:12px}
+td.id{color:var(--muted);font-size:12px;width:2.5em;text-align:right;font-variant-numeric:tabular-nums}
+td .tape{width:100%}
+.src{background:var(--field);border:1px solid var(--line2);border-radius:3px;padding:3px 6px;width:100%;min-width:0}
+.src:focus{border-color:var(--accent);outline:none}
+.src.unres{border-color:#8a6a2a}
+.led{display:inline-block;width:9px;height:9px;border-radius:50%;background:#444}
+.led.on{background:var(--ok);box-shadow:0 0 0 2px rgba(76,175,80,.25)}
+.led.warn{background:var(--bad)}
+.clear{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 6px;border-radius:3px}
+.clear:hover{color:var(--ink);background:var(--raise)}
+.empty-note{color:var(--muted);font-size:13px}
+
+/* settings panels */
+.sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
+.sgroup{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:0 14px 12px}
+.sgroup h3{margin:0 -14px 8px;padding:7px 14px;background:var(--panel2);border-bottom:1px solid var(--line);border-radius:4px 4px 0 0}
+.srow{display:grid;grid-template-columns:11em 1fr;align-items:center;gap:10px;padding:3px 0}
+.srow>span:first-child{color:var(--muted)}
+.srow select,.srow input[type=text],.srow input[type=number]{background:var(--field);border:1px solid var(--line2);border-radius:3px;padding:4px 8px;width:100%}
+.srow select:focus,.srow input:focus{border-color:var(--accent);outline:none}
+.srow input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
+.srow input.bad{border-color:var(--bad)}
+.srow.sub>span:first-child{padding-left:14px}
+.ipblock{border-top:1px solid var(--line);margin-top:6px;padding-top:6px}
+.ro{font-size:13px}
+.note{color:var(--muted);font-size:12px;margin:8px 0 0}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{background:var(--raise);border:1px solid var(--line2);border-radius:999px;padding:1px 9px;font-size:12px}
+
+/* ---- routing overview (crosspoint grid) ---- */
+.ov-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.ov-head h2{margin:0 6px 0 0;font-size:17px;font-weight:600}
+.ov-head input{background:var(--field);border:1px solid var(--line2);border-radius:999px;padding:4px 12px;width:15em}
+.ov-head input:focus{border-color:var(--accent);outline:none}
+.ov-stat{color:var(--muted);font-size:12.5px;margin-left:auto;min-height:1.3em;text-align:right}
+.mxwrap.ov{max-height:calc(100vh - 230px)}
+table.ovt{border-collapse:separate;border-spacing:0;width:auto;background:#262626}
+table.ovt th,table.ovt td{border-right:1px solid #363636;border-bottom:1px solid #363636;padding:0}
+table.ovt thead th{position:sticky;top:0;z-index:2;background:var(--panel);height:170px;vertical-align:bottom;min-width:24px}
+table.ovt thead th.dcol{background:var(--raise)}
+table.ovt thead th.corner{left:0;z-index:4;text-align:left;padding:0;background:var(--panel2);color:var(--muted);font-size:12px;font-weight:600;vertical-align:top}
+.corner .cx{position:relative;height:170px}
+.corner .cx .t{position:absolute;right:10px;top:10px}
+.corner .cx .r{position:absolute;left:10px;bottom:8px}
+table.ovt .hc{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:6px;padding:5px 0}
+table.ovt .v{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;max-height:136px;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:500}
+table.ovt tbody th{position:sticky;left:0;z-index:1;background:var(--panel);text-align:left;white-space:nowrap;padding:2px 8px;font-size:12.5px;font-weight:500;min-width:200px;max-width:280px;overflow:hidden;text-overflow:ellipsis}
+table.ovt tr.drow th{background:var(--raise)}
+table.ovt tr.crow th{padding-left:34px}
+table.ovt .ext{color:var(--muted);font-size:11.5px;font-weight:400}
+.dname{font-weight:600;color:var(--ink);cursor:pointer;background:none;border:none;padding:0;font:inherit;font-weight:600}
+.dname:hover{color:var(--accent);text-decoration:underline}
+.tog{background:var(--field);border:1px solid #5a5a5a;color:var(--ink);border-radius:2px;width:16px;height:16px;line-height:13px;padding:0;cursor:pointer;font-size:12px;margin-right:6px;flex-shrink:0;text-align:center}
+.tog:hover{border-color:var(--accent);color:var(--accent)}
+table.ovt td{width:24px;min-width:24px;height:22px;cursor:pointer;position:relative}
+table.ovt td.s{background:#2e2e2e}
+table.ovt tr:hover td{background:var(--hover)}
+table.ovt td:hover{background:var(--sel) !important}
+table.ovt td.o::after,table.ovt td.w::after{content:"";position:absolute;inset:0;margin:auto;width:15px;height:15px;background:center/contain no-repeat}
+table.ovt td.o::after{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='8' fill='%234caf50'/%3E%3Cpath d='M4.4 8.3l2.3 2.3 4.9-5' fill='none' stroke='white' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
+table.ovt td.s.o::after{width:13px;height:13px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%234caf50'/%3E%3Cpath d='M4.4 8.3l2.3 2.3 4.9-5' fill='none' stroke='white' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
+table.ovt td.w::after{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='8' fill='%23e5534b'/%3E%3Cpath d='M5.3 5.3l5.4 5.4M10.7 5.3l-5.4 5.4' stroke='white' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E")}
+table.ovt th.hl{color:var(--accent)}
+table.ovt th.hl .v,table.ovt th.hl .dname{color:var(--accent)}
+.lbl{cursor:text;border-radius:2px}
+.lbl:hover{outline:1px dashed var(--accent);outline-offset:1px}
+#ovEdit{position:fixed;z-index:20;background:var(--field);color:var(--ink);border:1px solid var(--accent);border-radius:3px;padding:3px 7px;font:500 13px var(--font);width:14em;box-shadow:0 6px 18px rgba(0,0,0,.55)}
+#ovEdit.bad{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad),0 6px 18px rgba(0,0,0,.55)}
+
+/* ---- device info table ---- */
+.mxwrap.info{max-height:calc(100vh - 230px)}
+table.info{width:100%;font-size:12.5px}
+table.info th{position:sticky;top:0;background:var(--panel2);color:var(--muted);font-weight:600;padding:7px 10px;border-bottom:1px solid #000;white-space:nowrap}
+table.info td{padding:6px 10px;border-bottom:1px solid #303030;white-space:nowrap}
+table.info tbody tr:nth-child(even) td{background:#262626}
+table.info tbody tr{cursor:pointer}
+table.info tbody tr:hover td{background:var(--sel)}
+table.info td.nm{font-weight:600}
+table.info td.nm .warnDot{margin-right:7px;vertical-align:middle}
+table.info td.num{font-variant-numeric:tabular-nums}
+table.info .na{color:var(--dim)}
+.pill{display:inline-block;border:1px solid var(--accent);color:var(--accent);border-radius:999px;padding:0 8px;font-size:11.5px}
+
+/* ---- single-device routing grid ---- */
+.mx-controls{display:flex;gap:12px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.mx-controls select{background:var(--field);border:1px solid var(--line2);border-radius:3px;padding:4px 8px}
+.mxwrap{overflow:auto;border:1px solid #111;border-radius:4px;max-height:70vh;background:var(--panel)}
+table.mx{width:auto}
+table.mx th,table.mx td{border:1px solid #363636;padding:0}
+table.mx thead th{position:sticky;top:0;background:var(--panel);z-index:2;height:130px;vertical-align:bottom;padding:4px 0}
+table.mx thead th .v{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:12px;color:var(--ink);padding:2px 5px;max-height:124px;overflow:hidden;text-overflow:ellipsis}
+table.mx tbody th{position:sticky;left:0;background:var(--panel);z-index:1;padding:3px 10px;white-space:nowrap;font-size:12.5px;color:var(--ink);font-weight:500;min-width:140px}
+table.mx thead th.corner{left:0;z-index:3;text-align:left;padding:6px 10px;color:var(--muted);font-size:12px;vertical-align:bottom}
+table.mx td button{display:block;width:26px;height:24px;background:transparent;border:none;cursor:pointer;padding:0}
+table.mx td button:hover{background:var(--sel)}
+table.mx td button .led{margin:auto;display:block}
+table.mx tr:hover th{color:var(--accent)}
+.mx-hint{color:var(--muted);font-size:12px;margin-top:8px}
+
+/* ---- start screen ---- */
+#drop{flex:1;display:grid;place-items:center;padding:24px}
+.dropbox{border:2px dashed var(--line2);border-radius:8px;padding:46px 40px;text-align:center;max-width:600px;background:var(--panel)}
+.dropbox.over{border-color:var(--accent);background:var(--hover)}
+.dropbox h2{font-size:21px;font-weight:600;margin:0 0 8px}
+.dropbox p{color:var(--muted);margin:0 0 20px}
+.dropbox .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+
+/* ---- dialogs ---- */
+.copyrow{display:flex;justify-content:flex-end;margin:-4px 0 10px}
+#cnDlg .opt{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;align-items:start;padding:8px 10px;border:1px solid var(--line2);border-radius:4px;margin-bottom:6px;cursor:pointer}
+#cnDlg .opt:has(input:checked){border-color:var(--accent);background:var(--hover)}
+#cnDlg .opt input{margin-top:3px;accent-color:var(--accent)}
+#cnDlg .opt b{font-weight:600}
+#cnDlg .opt span.d{grid-column:2;color:var(--muted);font-size:12px}
+#cnPrev{max-height:34vh;overflow:auto;border:1px solid var(--line2);border-radius:4px;margin-top:10px;background:var(--field)}
+#cnPrev table{font-size:12.5px}
+#cnPrev td{padding:3px 8px;border-bottom:1px solid var(--line)}
+#cnPrev td.arrow{color:var(--muted);width:1.5em;text-align:center}
+#cnPrev td.where{color:var(--muted);white-space:nowrap}
+#cnPrev .new{color:var(--accent);font-weight:600}
+#cnNote{color:var(--muted);font-size:12px;min-height:1.3em;margin:8px 0 0}
+dialog{background:var(--panel);color:var(--ink);border:1px solid var(--line2);border-radius:8px;padding:20px 22px;width:min(820px,96vw);box-shadow:0 18px 50px rgba(0,0,0,.6)}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+dialog h2{margin:0 0 4px;font-size:17px;font-weight:600}
+.hint{color:var(--muted);font-size:12.5px;margin:0 0 14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.grid2 label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.grid2 input,.grid2 select{background:var(--field);border:1px solid var(--line2);border-radius:3px;padding:5px 8px;color:var(--ink);font-size:13.5px}
+.grid2 input:focus,.grid2 select:focus{border-color:var(--accent);outline:none}
+#npTable{margin-bottom:8px}
+#npTable .num{width:5.5em}
+#npTable select{background:var(--field);border:1px solid var(--line2);border-radius:3px;padding:3px 6px;max-width:15em}
+#npTotal{color:var(--muted);font-size:12px;margin-left:10px}
+#npErr{color:#ff8a83;min-height:1.4em;margin:10px 0 0;font-size:13px}
+.dlgbtns{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+#toast{position:fixed;bottom:34px;left:50%;transform:translateX(-50%);background:#2e2e2e;color:var(--ink);border:1px solid var(--accent);padding:7px 16px;border-radius:999px;display:none;z-index:9;box-shadow:0 6px 20px rgba(0,0,0,.5)}
+@media (max-width:760px){main{flex-direction:column}aside{width:auto;max-height:40vh;border-right:none;border-bottom:1px solid var(--line)}.srow{grid-template-columns:1fr}.leader{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><h1>Offline Preset Editor for Dante</h1><span class="fileLabel" id="fileLabel" hidden></span></div>
+  <div class="preset-meta" id="metaBar" hidden>
+    <input id="presetName" aria-label="Preset name" placeholder="Preset name">
+    <input id="presetDesc" aria-label="Preset description" placeholder="Description">
+  </div>
+  <div class="leader" id="leaderInfo" hidden></div>
+  <span class="dirty" id="dirty" hidden>Unsaved changes</span>
+  <button class="btn" id="newBtn">New preset…</button>
+  <button class="btn" id="openBtn">Open preset…</button>
+  <button class="btn" id="revertBtn" hidden>Revert</button>
+  <button class="btn" id="copyBtn" hidden>Copy XML</button>
+  <button class="btn" id="saveAsBtn" hidden title="Save a copy under a new name (Shift+Ctrl/Cmd+S)">Save as…</button>
+  <button class="btn primary" id="saveBtn" hidden title="Save over the open file (Ctrl/Cmd+S)">Save</button>
+  <input type="file" id="file" accept=".xml,text/xml" hidden>
+</header>
+
+<nav class="viewtabs" id="viewTabs" role="tablist" aria-label="Views" hidden>
+  <button role="tab" id="overviewBtn" data-view="overview">Routing</button>
+  <button role="tab" id="infoBtn" data-view="info">Device Info</button>
+  <button role="tab" id="deviceTabBtn" data-view="device">Device View</button>
+</nav>
+<div id="drop">
+  <div class="dropbox" id="dropbox">
+    <h2>Open a Dante Controller preset</h2>
+    <p>Drop an exported preset .xml here, open one from disk, or build a new one from scratch. Everything stays on this computer.</p>
+    <div class="row">
+      <button class="btn primary" id="openBtn2">Open preset…</button>
+      <button class="btn" id="newBtn2">Build from scratch…</button>
+    </div>
+  </div>
+</div>
+
+<main id="app" hidden>
+  <aside>
+    <div class="sidehead"><span>Devices</span><span id="devCount"></span></div>
+    <ul id="devList" role="listbox" aria-label="Devices"></ul>
+    <div class="sidefoot"><button class="btn small" id="addDevBtn">Add devices…</button></div>
+    <div id="issues"></div>
+  </aside>
+  <section id="work"></section>
+</main>
+<footer class="statusbar" id="statusBar" hidden></footer>
+<div id="toast" role="status"></div>
+
+<dialog id="cnDlg" aria-labelledby="cnTitle">
+  <form id="cnForm" novalidate>
+    <h2 id="cnTitle">Copy channel names</h2>
+    <p class="hint" id="cnSub"></p>
+    <label class="opt"><input type="radio" name="cnMode" value="rxFromSrc" checked><b>Name receive channels after their sources</b>
+      <span class="d">Each routed Rx channel takes the name of the Tx channel feeding it, for example In 1 becomes Kick.</span></label>
+    <label class="opt"><input type="radio" name="cnMode" value="srcFromRx"><b>Name sources after these receive channels</b>
+      <span class="d">The Tx channel feeding each routed Rx channel takes the Rx name. This changes the sending devices, and their other routes follow.</span></label>
+    <label class="opt"><input type="radio" name="cnMode" value="txToRx"><b>Copy this device's Tx names to its Rx names</b>
+      <span class="d">Matched by channel number: Tx 1 → Rx 1, Tx 2 → Rx 2 and so on.</span></label>
+    <label class="opt"><input type="radio" name="cnMode" value="rxToTx"><b>Copy this device's Rx names to its Tx names</b>
+      <span class="d">Matched by channel number: Rx 1 → Tx 1, Rx 2 → Tx 2 and so on. Routes from these Tx channels follow.</span></label>
+    <div id="cnPrev"></div>
+    <p id="cnNote"></p>
+    <div class="dlgbtns">
+      <button type="button" class="btn" id="cnCancel">Cancel</button>
+      <button type="submit" class="btn primary" id="cnGo">Copy names</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="newDlg" aria-labelledby="dlgTitle">
+  <form id="newForm" novalidate>
+    <h2 id="dlgTitle">New preset</h2>
+    <p class="hint">Pick a device type to copy its settings (clocking, network, redundancy and so on) so Dante Controller can offer all its preset elements. Generic devices only carry name, sample rate, encoding, latency and channels. Tx channels are what a device sends onto the network; Rx channels are what it receives.</p>
+    <div class="grid2" id="presetFields">
+      <label>Preset name<input id="npName" value="New preset" spellcheck="false"></label>
+      <label>Description<input id="npDesc"></label>
+    </div>
+    <div class="grid2">
+      <label>Sample rate (all new devices)<select id="npSr">
+        <option value="44100">44.1 kHz</option><option value="48000" selected>48 kHz</option>
+        <option value="88200">88.2 kHz</option><option value="96000">96 kHz</option></select></label>
+      <label>Latency<select id="npLat">
+        <option value="">Keep each device type's own (generic: 1 ms)</option>
+        <option value="250">0.25 ms</option><option value="500">0.5 ms</option>
+        <option value="1000">1 ms</option><option value="2000">2 ms</option><option value="5000">5 ms</option></select></label>
+    </div>
+    <table id="npTable">
+      <thead><tr><th>Device type</th><th>Device name</th><th>Tx</th><th>Rx</th><th></th></tr></thead>
+      <tbody id="npBody"></tbody>
+    </table>
+    <button type="button" class="btn small" id="npAddRow">Add another device</button><span id="npTotal"></span>
+    <p id="npErr" role="alert"></p>
+    <div class="dlgbtns">
+      <button type="button" class="btn" id="npCancel">Cancel</button>
+      <button type="submit" class="btn primary" id="npGo">Create preset</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+"use strict";
+const BUILTIN_TEMPLATES=[{"label":"Allen & Heath Dante128 (dLive)","model_id":"416C6C656E487468|0000000000000002","tx":128,"rx":128,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <device_redundancy/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <device_external_word_clock/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>416C6C656E487468<\/manufacturer_id>\n        <manufacturer_name>Allen-Heath<\/manufacturer_name>\n        <model_id>0000000000000002<\/model_id>\n        <model_name>Dante128<\/model_name>\n        <model_version>1.1.2<\/model_version>\n        <device_type>53756D6D69744843<\/device_type>\n        <device_type_string>SummitHC<\/device_type_string>\n        <redundancy value=\"true\"/>\n        <preferred_master value=\"false\"/>\n        <external_word_clock value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <interface network=\"1\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n        <\/clock_priority>\n    <\/device>","short":"Dante128"},{"label":"Ampetronic C-Series loop driver","short":"C-Series","model_id":"416D706574726F6E|0000000000000002","tx":0,"rx":2,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>416D706574726F6E<\/manufacturer_id>\n        <manufacturer_name>Ampetronic<\/manufacturer_name>\n        <model_id>0000000000000002<\/model_id>\n        <model_name>C-Series<\/model_name>\n        <model_version>1.0.1<\/model_version>\n        <model_version_string>All C-series drives<\/model_version_string>\n        <device_type>556C74696D6F5800<\/device_type>\n        <device_type_string>UltimoX2<\/device_type_string>\n        <preferred_master value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n        <\/clock_priority>\n    <\/device>"},{"label":"Atlas IED AZM8-D","short":"AZM8-D","model_id":"4945440000000000|0000000000000001","tx":16,"rx":16,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>4945440000000000<\/manufacturer_id>\n        <manufacturer_name>Atlas IED<\/manufacturer_name>\n        <model_id>0000000000000001<\/model_id>\n        <model_name>AZM8-D<\/model_name>\n        <model_version>1.1.0<\/model_version>\n        <device_type>426B6C796E330000<\/device_type>\n        <device_type_string>Brooklyn-3<\/device_type_string>\n        <preferred_master value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n            <aes67_multicast_address_prefix>4014276608<\/aes67_multicast_address_prefix>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n            <follower_only>false<\/follower_only>\n        <\/clock_priority>\n    <\/device>"},{"label":"Audinate AVIO USB-C adapter","short":"AVIO-USBC","model_id":"417564696E617465|44494F5553424300","tx":2,"rx":2,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>417564696E617465<\/manufacturer_id>\n        <manufacturer_name>Audinate<\/manufacturer_name>\n        <model_id>44494F5553424300<\/model_id>\n        <model_name>Audinate Dante AVIO USBC<\/model_name>\n        <model_version>1.1.1<\/model_version>\n        <device_type>44494F5553424300<\/device_type>\n        <device_type_string>DIOUSBC<\/device_type_string>\n        <preferred_master value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n            <aes67_multicast_address_prefix>4014276608<\/aes67_multicast_address_prefix>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n            <follower_only>false<\/follower_only>\n        <\/clock_priority>\n    <\/device>"},{"label":"Blustream DA11USB","model_id":"426C757374726561|00000000000DA11B","tx":2,"rx":2,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>426C757374726561<\/manufacturer_id>\n        <manufacturer_name>Blustream Pty Ltd<\/manufacturer_name>\n        <model_id>00000000000DA11B<\/model_id>\n        <model_name>DA11USB<\/model_name>\n        <model_version>1.0.0<\/model_version>\n        <device_type>556C74696D6F5800<\/device_type>\n        <device_type_string>UltimoX2<\/device_type_string>\n        <preferred_master value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>5000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n            <aes67_multicast_address_prefix>4014276608<\/aes67_multicast_address_prefix>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n            <follower_only>false<\/follower_only>\n        <\/clock_priority>\n    <\/device>","short":"DA11USB"},{"label":"Blustream DA44AU","model_id":"426C757374726561|0000000000000001","tx":4,"rx":4,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>426C757374726561<\/manufacturer_id>\n        <manufacturer_name>Blustream<\/manufacturer_name>\n        <model_id>0000000000000001<\/model_id>\n        <model_name>DA44AU<\/model_name>\n        <model_version>1.0.2<\/model_version>\n        <device_type>556C74696D6F3458<\/device_type>\n        <device_type_string>UltimoX4<\/device_type_string>\n        <preferred_master value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n            <aes67_multicast_address_prefix>4014276608<\/aes67_multicast_address_prefix>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n            <follower_only>false<\/follower_only>\n        <\/clock_priority>\n    <\/device>","short":"DA44AU"},{"label":"d&b audiotechnik 5D","short":"5D","model_id":"7461746C74640000|0000000700000001","tx":0,"rx":4,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <device_switch_vlan/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>7461746C74640000<\/manufacturer_id>\n        <manufacturer_name>d&amp;b audiotechnik<\/manufacturer_name>\n        <model_id>0000000700000001<\/model_id>\n        <model_name>5D<\/model_name>\n        <model_version>1.0.3<\/model_version>\n        <model_version_string>1.0.3<\/model_version_string>\n        <device_type>556C74696D6F3458<\/device_type>\n        <device_type_string>UltimoX4<\/device_type_string>\n        <switch_vlan value=\"1\"/>\n        <preferred_master value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n            <aes67_multicast_address_prefix>4014276608<\/aes67_multicast_address_prefix>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n            <follower_only>false<\/follower_only>\n        <\/clock_priority>\n    <\/device>"},{"label":"Dante Virtual Soundcard","model_id":"417564696E617465|4476734D61634F73","tx":64,"rx":64,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <device_samplerate/>\n            <device_clock_pullup/>\n            <device_encoding/>\n            <clock/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>417564696E617465<\/manufacturer_id>\n        <manufacturer_name>Audinate Pty Ltd<\/manufacturer_name>\n        <model_id>4476734D61634F73<\/model_id>\n        <model_name>Dante Virtual Soundcard<\/model_name>\n        <model_version>4.5.2<\/model_version>\n        <model_version_string>4.5.2.3<\/model_version_string>\n        <device_type>4476734D61630000<\/device_type>\n        <device_type_string>Dante Virtual Soundcard macOS<\/device_type_string>\n        <clock_pullup value=\"0\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n    <\/device>","short":"DVS"},{"label":"DiGiCo DMI-Dante 64@96 card","short":"DMI-Dante","model_id":"44696769636F0000|0000000800000001","tx":64,"rx":64,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <device_redundancy/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <device_external_word_clock/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>44696769636F0000<\/manufacturer_id>\n        <manufacturer_name>DiGiCo (UK) Ltd<\/manufacturer_name>\n        <model_id>0000000800000001<\/model_id>\n        <model_name>DMI_DANTE_64@96<\/model_name>\n        <model_version>4.0.20<\/model_version>\n        <device_type>53756D6D69744843<\/device_type>\n        <device_type_string>SummitHC<\/device_type_string>\n        <redundancy value=\"false\"/>\n        <preferred_master value=\"false\"/>\n        <external_word_clock value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n        <\/clock_priority>\n    <\/device>"},{"label":"DiGiCo DQ-Rack","model_id":"44696769636F0000|4447434F30180000","tx":48,"rx":32,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <device_redundancy/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>44696769636F0000<\/manufacturer_id>\n        <manufacturer_name>DiGiCo (UK) Ltd<\/manufacturer_name>\n        <model_id>4447434F30180000<\/model_id>\n        <model_name>DQ-Rack<\/model_name>\n        <model_version>1.50.1<\/model_version>\n        <device_type>53756D6D69744843<\/device_type>\n        <device_type_string>SummitHC<\/device_type_string>\n        <redundancy value=\"true\"/>\n        <preferred_master value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <interface network=\"1\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n        <\/clock_priority>\n    <\/device>","short":"DQ-Rack"},{"label":"Glensound AOIP4 analogue output","short":"AOIP4O","model_id":"476C656E736F756E|0000000000000042","tx":0,"rx":4,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>476C656E736F756E<\/manufacturer_id>\n        <manufacturer_name>Glensound<\/manufacturer_name>\n        <model_id>0000000000000042<\/model_id>\n        <model_name>AOIP4 Analogue output<\/model_name>\n        <model_version>1.2.0<\/model_version>\n        <model_version_string>AOIP4 Analogue output<\/model_version_string>\n        <device_type>556C74696D6F3458<\/device_type>\n        <device_type_string>UltimoX4<\/device_type_string>\n        <preferred_master value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n            <aes67_multicast_address_prefix>4014276608<\/aes67_multicast_address_prefix>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n            <follower_only>false<\/follower_only>\n        <\/clock_priority>\n    <\/device>"},{"label":"Glensound Beatrice PM4","short":"PM4","model_id":"476C656E736F756E|0000000000000078","tx":4,"rx":4,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>476C656E736F756E<\/manufacturer_id>\n        <manufacturer_name>Glensound<\/manufacturer_name>\n        <model_id>0000000000000078<\/model_id>\n        <model_name>Beatrice PM4<\/model_name>\n        <model_version>1.0.0<\/model_version>\n        <model_version_string>Beatrice PM4<\/model_version_string>\n        <device_type>556C74696D6F3458<\/device_type>\n        <device_type_string>UltimoX4<\/device_type_string>\n        <preferred_master value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n            <aes67_multicast_address_prefix>4014276608<\/aes67_multicast_address_prefix>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n            <follower_only>false<\/follower_only>\n        <\/clock_priority>\n    <\/device>"},{"label":"Glensound DARK8AO","short":"DARK8AO","model_id":"476C656E736F756E|0000000000000047","tx":0,"rx":8,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <device_redundancy/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>476C656E736F756E<\/manufacturer_id>\n        <manufacturer_name>Glensound<\/manufacturer_name>\n        <model_id>0000000000000047<\/model_id>\n        <model_name>DARK8AO<\/model_name>\n        <model_version>1.0.1<\/model_version>\n        <device_type>426B6C796E330000<\/device_type>\n        <device_type_string>Brooklyn-3<\/device_type_string>\n        <redundancy value=\"true\"/>\n        <preferred_master value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <interface network=\"1\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n            <aes67_multicast_address_prefix>4014276608<\/aes67_multicast_address_prefix>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n            <follower_only>false<\/follower_only>\n        <\/clock_priority>\n    <\/device>"},{"label":"Powersoft Mezzo","model_id":"506F776572736674|0000000700000010","tx":4,"rx":4,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <device_switch_vlan/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>506F776572736674<\/manufacturer_id>\n        <manufacturer_name>Powersoft<\/manufacturer_name>\n        <model_id>0000000700000010<\/model_id>\n        <model_name>Mezzo<\/model_name>\n        <model_version>1.0.5<\/model_version>\n        <device_type>556C74696D6F3458<\/device_type>\n        <device_type_string>UltimoX4<\/device_type_string>\n        <switch_vlan value=\"1\"/>\n        <preferred_master value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>5000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n            <aes67_multicast_address_prefix>4014276608<\/aes67_multicast_address_prefix>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n            <follower_only>false<\/follower_only>\n        <\/clock_priority>\n    <\/device>","short":"Mezzo"},{"label":"Powersoft Quattrocanali (Q1204, Q2404 etc.)","short":"Quattro","model_id":"506F776572736674|0000000700000005","tx":0,"rx":4,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>506F776572736674<\/manufacturer_id>\n        <manufacturer_name>Powersoft<\/manufacturer_name>\n        <model_id>0000000700000005<\/model_id>\n        <model_name>Quattrocanali Series<\/model_name>\n        <model_version>2.1.6<\/model_version>\n        <device_type>556C74696D6F3458<\/device_type>\n        <device_type_string>UltimoX4<\/device_type_string>\n        <preferred_master value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n            <aes67_multicast_address_prefix>4014276608<\/aes67_multicast_address_prefix>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n            <follower_only>false<\/follower_only>\n        <\/clock_priority>\n    <\/device>"},{"label":"Powersoft T Series","model_id":"506F776572736674|0000000700000008","tx":0,"rx":4,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <device_switch_vlan/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>506F776572736674<\/manufacturer_id>\n        <manufacturer_name>Powersoft<\/manufacturer_name>\n        <model_id>0000000700000008<\/model_id>\n        <model_name>T Series<\/model_name>\n        <model_version>2.1.6<\/model_version>\n        <device_type>556C74696D6F3458<\/device_type>\n        <device_type_string>UltimoX4<\/device_type_string>\n        <switch_vlan value=\"1\"/>\n        <preferred_master value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>5000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n        <\/clock_priority>\n    <\/device>","short":"T-Series"},{"label":"Sennheiser EW-DX EM 2 Dante","model_id":"53656E6E68736572|44455045564B3100","tx":2,"rx":0,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <device_samplerate/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>53656E6E68736572<\/manufacturer_id>\n        <manufacturer_name>Sennheiser electronic SE &amp; Co. KG<\/manufacturer_name>\n        <model_id>44455045564B3100<\/model_id>\n        <model_name>EW-DX EM 2 Dante<\/model_name>\n        <model_version>1.2.0<\/model_version>\n        <model_version_string>4.0.0<\/model_version_string>\n        <device_type>44455041524D3634<\/device_type>\n        <device_type_string>Dante Embedded Platform<\/device_type_string>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>1000<\/unicast_latency>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n            <aes67_multicast_address_prefix>4014276608<\/aes67_multicast_address_prefix>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n    <\/device>","short":"EWDX-EM2"},{"label":"TEAC MM-2D","short":"MM-2D","model_id":"54454143436F7270|0000000000000004","tx":4,"rx":4,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <device_switch_vlan/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>54454143436F7270<\/manufacturer_id>\n        <manufacturer_name>TEAC Corporation<\/manufacturer_name>\n        <model_id>0000000000000004<\/model_id>\n        <model_name>MM-2D<\/model_name>\n        <model_version>1.0.1<\/model_version>\n        <device_type>556C74696D6F3458<\/device_type>\n        <device_type_string>UltimoX4<\/device_type_string>\n        <switch_vlan value=\"2\"/>\n        <preferred_master value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n            <aes67_multicast_address_prefix>4014276608<\/aes67_multicast_address_prefix>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n            <follower_only>false<\/follower_only>\n        <\/clock_priority>\n    <\/device>"},{"label":"Yamaha MRX7-D","short":"MRX7-D","model_id":"59616D6168610000|3851373600000000","tx":64,"rx":64,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <device_redundancy/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <device_external_word_clock/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>59616D6168610000<\/manufacturer_id>\n        <manufacturer_name>Yamaha Corporation<\/manufacturer_name>\n        <model_id>3851373600000000<\/model_id>\n        <model_name>MRX7-D<\/model_name>\n        <model_version>4.21.0<\/model_version>\n        <model_version_string>V4.21 <\/model_version_string>\n        <device_type>426B6C796E330000<\/device_type>\n        <device_type_string>Brooklyn-III<\/device_type_string>\n        <redundancy value=\"true\"/>\n        <preferred_master value=\"false\"/>\n        <external_word_clock value=\"false\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <interface network=\"1\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n            <aes67_multicast_address_prefix>4014276608<\/aes67_multicast_address_prefix>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n            <follower_only>false<\/follower_only>\n        <\/clock_priority>\n    <\/device>"},{"label":"Yamaha QL5","short":"QL5","model_id":"59616D6168610000|384F333200000000","tx":64,"rx":64,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <device_redundancy/>\n            <device_switch_vlan/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_clock_pullup/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <device_external_word_clock/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>59616D6168610000<\/manufacturer_id>\n        <manufacturer_name>Yamaha Corporation<\/manufacturer_name>\n        <model_id>384F333200000000<\/model_id>\n        <model_name>QL5<\/model_name>\n        <model_version>5.90.0<\/model_version>\n        <model_version_string>V5.90<\/model_version_string>\n        <device_type>426B6C796E320000<\/device_type>\n        <device_type_string>Brooklyn II<\/device_type_string>\n        <redundancy value=\"true\"/>\n        <switch_vlan value=\"2\"/>\n        <preferred_master value=\"false\"/>\n        <external_word_clock value=\"false\"/>\n        <clock_pullup value=\"0\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <interface network=\"1\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n    <\/device>"},{"label":"Yamaha Rio1608-D3","short":"Rio1608-D3","model_id":"59616D6168610000|3030313435390000","tx":16,"rx":10,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <device_redundancy/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_clock_pullup/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>59616D6168610000<\/manufacturer_id>\n        <manufacturer_name>Yamaha Corporation<\/manufacturer_name>\n        <model_id>3030313435390000<\/model_id>\n        <model_name>Rio1608-D3<\/model_name>\n        <model_version>1.2.0<\/model_version>\n        <model_version_string>V1.02<\/model_version_string>\n        <device_type>5A796E7144445200<\/device_type>\n        <device_type_string>DanteIP-Zynq-US-SC<\/device_type_string>\n        <redundancy value=\"true\"/>\n        <preferred_master value=\"false\"/>\n        <clock_pullup value=\"0\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <interface network=\"1\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n            <aes67_multicast_address_prefix>4014276608<\/aes67_multicast_address_prefix>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n            <follower_only>false<\/follower_only>\n        <\/clock_priority>\n    <\/device>"},{"label":"Yamaha Rio3224-D2","short":"Rio3224-D2","model_id":"59616D6168610000|3852313900000000","tx":32,"rx":24,"xml":"<device>\n        <captureInfo>\n            <device_name/>\n            <device_redundancy/>\n            <interface_ipv4_addresses/>\n            <device_samplerate/>\n            <device_clock_pullup/>\n            <device_encoding/>\n            <device_unicast_latency/>\n            <rtp/>\n            <clock/>\n            <clock_priority/>\n            <txchannel_names/>\n            <txflows/>\n            <rxchannel_names/>\n            <rxchannel_subscriptions/>\n            <rxflows/>\n        <\/captureInfo>\n        <manufacturer_id>59616D6168610000<\/manufacturer_id>\n        <manufacturer_name>Yamaha Corporation<\/manufacturer_name>\n        <model_id>3852313900000000<\/model_id>\n        <model_name>Rio3224-D2<\/model_name>\n        <model_version>1.85.0<\/model_version>\n        <model_version_string>V1.85<\/model_version_string>\n        <device_type>426B6C796E330000<\/device_type>\n        <device_type_string>Brooklyn-III<\/device_type_string>\n        <redundancy value=\"true\"/>\n        <preferred_master value=\"false\"/>\n        <clock_pullup value=\"0\"/>\n        <samplerate>48000<\/samplerate>\n        <encoding>24<\/encoding>\n        <unicast_latency>1000<\/unicast_latency>\n        <interface network=\"0\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <interface network=\"1\">\n            <ipv4_address mode=\"dynamic\"/>\n        <\/interface>\n        <rtp>\n            <interop_mode>none<\/interop_mode>\n            <aes67_multicast_address_prefix>4014276608<\/aes67_multicast_address_prefix>\n        <\/rtp>\n        <clock>\n            <subdomain_name>_DFLT<\/subdomain_name>\n            <v1_unicast_delay_requests>false<\/v1_unicast_delay_requests>\n            <v2_unicast_delay_requests>false<\/v2_unicast_delay_requests>\n            <v1_enabled>true<\/v1_enabled>\n            <v2_enabled>false<\/v2_enabled>\n        <\/clock>\n        <clock_priority>\n            <preferred>false<\/preferred>\n            <follower_only>false<\/follower_only>\n        <\/clock_priority>\n    <\/device>"}];
+
+let doc=null, fileName="preset.xml", decl="", originalText="", sel=0, tab="channels", mxTx=null, dirty=false;
+let propagate=true;
+let view="overview", exTx=new Set(), exRx=new Set(), ovFilter="";
+let sessionTemplates=[];
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const lc=s=>(s||"").toLowerCase();
+
+/* ---------- XML helpers (direct children only) ---------- */
+const kids=(el,tag)=>el?[...el.children].filter(c=>c.localName===tag):[];
+const kid=(el,tag)=>kids(el,tag)[0]||null;
+const txt=(el,tag)=>{const k=kid(el,tag);return k?k.textContent:""};
+function appendEl(el,k){
+  const first=el.firstElementChild, last=el.lastChild;
+  if(first && last && last.nodeType===3){
+    const prev=first.previousSibling;
+    const indent=(prev&&prev.nodeType===3)?prev.nodeValue:"\n";
+    el.insertBefore(el.ownerDocument.createTextNode(indent),last);
+    el.insertBefore(k,last);
+  } else el.appendChild(k);
+  return k;
+}
+function ensureKid(el,tag){
+  const k=kid(el,tag); if(k) return k;
+  return appendEl(el,el.ownerDocument.createElementNS(el.namespaceURI,tag));
+}
+function removeKid(el,tag){
+  const k=kid(el,tag); if(!k) return;
+  const p=k.previousSibling; if(p&&p.nodeType===3&&!p.nodeValue.trim()) p.remove();
+  k.remove();
+}
+const setTxt=(el,tag,v)=>{ensureKid(el,tag).textContent=v};
+
+/* ---------- Preset model ---------- */
+const root=()=>doc.documentElement;
+const devices=()=>kids(root(),"device");
+const devName=d=>txt(d,"name");
+const txChans=d=>kids(d,"txchannel");
+const rxChans=d=>kids(d,"rxchannel");
+const txLabel=tc=>kid(tc,"label")?txt(tc,"label"):txt(tc,"name");
+function setTxLabel(tc,v){ if(kid(tc,"label")||!kid(tc,"name")) setTxt(tc,"label",v); else setTxt(tc,"name",v); }
+const chId=c=>c.getAttribute("danteId")||"";
+const rxSub=rc=>({dev:txt(rc,"subscribed_device"),ch:txt(rc,"subscribed_channel")});
+function setSub(rc,dev,ch){
+  dev=dev.trim(); ch=ch.trim();
+  if(!dev&&!ch){removeKid(rc,"subscribed_channel");removeKid(rc,"subscribed_device");}
+  else{setTxt(rc,"subscribed_channel",ch);setTxt(rc,"subscribed_device",dev);}
+}
+const findDev=name=>devices().find(d=>lc(devName(d))===lc(name));
+/* "." in a subscription means the receiving device itself */
+const srcDev=(d,name)=>name==="."?d:findDev(name);
+const modelOf=d=>[txt(d,"manufacturer_name"),txt(d,"model_name")].filter(Boolean).join(" ");
+
+function markDirty(){dirty=true;$("dirty").hidden=false;updateTitle();}
+function markClean(){dirty=false;$("dirty").hidden=true;updateTitle();}
+function updateTitle(){
+  const n=fileHandle?fileHandle.name:(doc?fileName:"");
+  const fl=$("fileLabel"); if(fl){fl.hidden=!doc; fl.textContent=fileHandle||!FS_OK?n:(doc?`${n} (Save will ask where)`:""); fl.title=fl.textContent;}
+  document.title=doc?`${dirty?"• ":""}${n} – Offline Preset Editor for Dante`:"Offline Preset Editor for Dante";
+  if(APP) invoke("set_title",{title:document.title}).catch(()=>{});
+}
+
+/* Dante Controller's Name element sets the device's friendly name, so every device needs <friendly_name> */
+function ensureFriendly(d){
+  let f=kid(d,"friendly_name"); if(f) return f;
+  f=d.ownerDocument.createElementNS(d.namespaceURI,"friendly_name");
+  f.textContent=devName(d);
+  const nm=kid(d,"name");
+  if(nm){const ws=nm.previousSibling;
+    const ref=nm.nextSibling;
+    d.insertBefore(f,ref);
+    d.insertBefore(d.ownerDocument.createTextNode(ws&&ws.nodeType===3?ws.nodeValue:"\n"),f);}
+  else appendEl(d,f);
+  return f;
+}
+
+/* ---------- Renames with propagation ---------- */
+function renameDevice(d,newName){
+  const old=devName(d); if(old===newName) return 0;
+  setTxt(d,"name",newName);
+  ensureFriendly(d).textContent=newName;
+  let n=0;
+  if(propagate) for(const od of devices()) for(const rc of rxChans(od)){
+    const s=rxSub(rc); if(s.dev&&lc(s.dev)===lc(old)){setTxt(rc,"subscribed_device",newName);n++;}
+  }
+  return n;
+}
+function renameTx(d,tc,newLabel){
+  const old=txLabel(tc); if(old===newLabel) return 0;
+  setTxLabel(tc,newLabel);
+  let n=0;
+  if(propagate){const dn=lc(devName(d));
+    for(const od of devices()) for(const rc of rxChans(od)){
+      const s=rxSub(rc);
+      if((lc(s.dev)===dn||(s.dev==="."&&od===d))&&s.ch===old){setTxt(rc,"subscribed_channel",newLabel);n++;}
+    }}
+  return n;
+}
+
+/* ---------- Validation ---------- */
+const DEV_RE=/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,29}[A-Za-z0-9])?$/;
+function devNameProblem(n){
+  if(!n) return "Device name is empty";
+  if(n.length>31) return "Device names can be at most 31 characters";
+  if(!DEV_RE.test(n)) return "Device names can only use letters, numbers and hyphens, and can't start or end with a hyphen";
+  return null;
+}
+function chNameProblem(n){
+  if(!n) return "Channel name is empty";
+  if(n.length>31) return "Channel names can be at most 31 characters";
+  if(/[=.@]/.test(n)) return "Channel names can't contain = . or @";
+  return null;
+}
+const isTrue=v=>lc(v)==="true";
+function leaderOf(d){
+  const pm=kid(d,"preferred_master"), cp=kid(kid(d,"clock_priority"),"preferred");
+  return (pm&&isTrue(pm.getAttribute("value")))||(cp&&isTrue(cp.textContent));
+}
+function validate(){
+  const out=[]; const perDev=new Map();
+  const add=(d,level,msg)=>{out.push({d,level,msg}); if(level!=="i") perDev.set(d,true);};
+  const seen=new Map();
+  for(const d of devices()){
+    const n=devName(d), p=devNameProblem(n); if(p) add(d,"e",`${n||"(unnamed)"}: ${p}`);
+    if(seen.has(lc(n))) add(d,"e",`Two devices are called ${n}`); seen.set(lc(n),d);
+    const tx=new Set();
+    for(const tc of txChans(d)){const l=txLabel(tc),q=chNameProblem(l);
+      if(q) add(d,"e",`${n} Tx ${chId(tc)}: ${q}`);
+      if(l&&tx.has(lc(l))) add(d,"e",`${n}: Tx name "${l}" is used twice`); tx.add(lc(l));}
+    const rx=new Set();
+    for(const rc of rxChans(d)){const l=txt(rc,"name"),q=chNameProblem(l);
+      if(q) add(d,"e",`${n} Rx ${chId(rc)}: ${q}`);
+      if(l&&rx.has(lc(l))) add(d,"e",`${n}: Rx name "${l}" is used twice`); rx.add(lc(l));
+      const s=rxSub(rc);
+      if(s.dev||s.ch){
+        if(!s.dev||!s.ch) add(d,"e",`${n} Rx ${l}: subscription needs both a device and a channel`);
+        else{const sd=srcDev(d,s.dev);
+          if(!sd) add(d,"i",`${n} Rx ${l} ← ${s.ch}@${s.dev}: device isn't in this preset`);
+          else if(!txChans(sd).some(t=>txLabel(t)===s.ch)) add(d,"w",`${n} Rx ${l} ← ${s.ch}@${s.dev}: no Tx channel with that name`);}
+      }
+    }
+  }
+  const leaders=devices().filter(leaderOf);
+  if(leaders.length>1) leaders.forEach(d=>add(d,"w",`${devName(d)}: more than one device is set as preferred leader (${leaders.map(devName).join(", ")})`));
+  const ipSeen=new Map();
+  for(const d of devices()){
+    const n=devName(d), subnets=[];
+    for(const i of kids(d,"interface")){
+      const v=ipVals(i), where=`${n} ${ifaceName(i.getAttribute("network")).toLowerCase()}`;
+      if(v.mode!=="static") continue;
+      if(!v.address||!ipOk(v.address)){add(d,"e",`${where}: ${v.address?"IP address isn't valid":"static but no IP address"}`);continue;}
+      if(!v.netmask||!maskOk(v.netmask)){add(d,"e",`${where}: ${v.netmask?"subnet mask isn't valid":"static but no subnet mask"}`);continue;}
+      const a=ipInt(v.address), m=ipInt(v.netmask), net=(a&m)>>>0, bc=(net|(~m>>>0))>>>0;
+      if(m<0xFFFFFFFE&&(a===net||a===bc)) add(d,"e",`${where}: ${v.address} is the ${a===net?"network":"broadcast"} address for that subnet`);
+      for(const f of ["gateway","dnsserver"]) if(v[f]&&!ipOk(v[f])) add(d,"e",`${where}: ${f==="gateway"?"gateway":"DNS server"} isn't a valid address`);
+      if(v.gateway&&ipOk(v.gateway)&&((ipInt(v.gateway)&m)>>>0)!==net) add(d,"w",`${where}: gateway ${v.gateway} is outside the device's subnet`);
+      if(ipSeen.has(v.address)) add(d,"e",`${v.address} is used by both ${ipSeen.get(v.address)} and ${where}. Dante Controller won't apply duplicate static IPs`);
+      else ipSeen.set(v.address,where);
+      subnets.push(`${net}/${m}`);
+    }
+    if(subnets.length===2&&subnets[0]===subnets[1]) add(d,"w",`${n}: primary and secondary are on the same subnet. Redundant interfaces need separate subnets`);
+  }
+  const rates=new Map(); devices().forEach(d=>{const r=txt(d,"samplerate"); if(r){if(!rates.has(r))rates.set(r,[]);rates.get(r).push(devName(d));}});
+  if(rates.size>1) out.push({level:"w",msg:`Devices are at different sample rates (${[...rates].map(([r,ds])=>`${r/1000} kHz: ${ds.length}`).join(", ")}). Devices can only route to others at the same rate.`});
+  return {list:out,perDev};
+}
+
+/* ---------- Loading ---------- */
+function load(text,name){
+  const p=new DOMParser().parseFromString(text,"application/xml");
+  if(p.getElementsByTagName("parsererror")[0]){toast("That file isn't valid XML");return false;}
+  if(p.documentElement.localName!=="preset"||!kids(p.documentElement,"device").length){
+    toast("No Dante devices found. Is this a Dante Controller preset?");return false;}
+  doc=p; fileName=name||"preset.xml"; originalText=text; sel=0; mxTx=null; dirty=false; view="overview"; exTx=new Set(); exRx=new Set(); ovFilter="";
+  const m=text.match(/^\s*(<\?xml[^?]*\?>)/); decl=m?m[1]:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  $("drop").hidden=true; $("app").hidden=false;
+  for(const id of ["metaBar","saveBtn","saveAsBtn","copyBtn","revertBtn","viewTabs","statusBar","leaderInfo"]) $(id).hidden=false;
+  $("dirty").hidden=true; updateTitle();
+  $("presetName").value=txt(root(),"name"); $("presetDesc").value=txt(root(),"description");
+  learnTemplates();
+  const missing=devices().filter(d=>devName(d)&&!kid(d,"friendly_name"));
+  missing.forEach(ensureFriendly);
+  render();
+  if(missing.length){markDirty();toast(`Added friendly names to ${missing.length} device${missing.length>1?"s":""} so Dante Controller applies their names`);}
+  return true;
+}
+function readFile(f,after){const r=new FileReader();r.onload=()=>{if(load(r.result,f.name)&&after)after();};r.readAsText(f);}
+
+/* Device types in an opened preset become templates for "Add devices", on top of the built-in ones */
+function skeletonXml(d){
+  const c=d.cloneNode(true);
+  for(const t of ["instance_id","name","default_name","friendly_name","txchannel","rxchannel","txflow"]) kids(c,t).forEach(k=>{
+    const p=k.previousSibling; if(p&&p.nodeType===3&&!p.nodeValue.trim()) p.remove(); k.remove();});
+  return new XMLSerializer().serializeToString(c);
+}
+function learnTemplates(){
+  const known=new Set([...BUILTIN_TEMPLATES,...sessionTemplates].map(t=>t.model_id));
+  const knownModels=new Set([...BUILTIN_TEMPLATES,...sessionTemplates].map(t=>lc((/<model_name>([^<]*)/.exec(t.xml)||[])[1])));
+  for(const d of devices()){
+    const mid=txt(d,"model_id")&&`${txt(d,"manufacturer_id")}|${txt(d,"model_id")}`; if(!mid||known.has(mid)||!kid(d,"captureInfo")) continue;
+    if(knownModels.has(lc(txt(d,"model_name")))) continue;   // e.g. one DVS entry covers every OS and version
+    known.add(mid);
+    const short=(txt(d,"model_name")||"Device").replace(/[^A-Za-z0-9-]+/g,"-").replace(/^-+|-+$/g,"").slice(0,24)||"Device";
+    sessionTemplates.push({label:modelOf(d)||short,short,model_id:mid,tx:txChans(d).length,rx:rxChans(d).length,xml:skeletonXml(d),fromPreset:true});
+  }
+}
+
+/* ---------- Rendering ---------- */
+function render(){ renderSidebar(); renderWork(); }
+
+function renderSidebar(){
+  const v=validate(), ds=devices();
+  $("devList").innerHTML=ds.map((d,i)=>`<li role="option" tabindex="0" data-i="${i}" aria-selected="${view==="device"&&i===sel}">
+    ${v.perDev.get(d)?'<span class="warnDot" title="Has issues"></span>':''}
+    <span class="dn">${esc(devName(d))}</span>
+    <span class="cnt">${txChans(d).length}×${rxChans(d).length}</span>
+    <span class="md">${esc(txt(d,"model_name")||"Generic device")}</span></li>`).join("");
+  document.querySelectorAll("#viewTabs [data-view]").forEach(b=>b.setAttribute("aria-selected",b.dataset.view===view));
+  const cur=ds[sel];
+  $("deviceTabBtn").disabled=!cur;
+  $("deviceTabBtn").textContent=cur?`Device View: ${devName(cur)}`:"Device View";
+  $("devCount").textContent=ds.length;
+  const leaders=ds.filter(leaderOf).map(devName);
+  $("leaderInfo").innerHTML=`<span>Preferred Leader</span><b title="${esc(leaders.join(", "))}">${leaders.length?esc(leaders.join(", ")):"None set"}</b>`;
+  const ntx=ds.reduce((a,d)=>a+txChans(d).length,0), nrx=ds.reduce((a,d)=>a+rxChans(d).length,0);
+  const nroutes=ds.reduce((a,d)=>a+rxChans(d).filter(rc=>rxSub(rc).dev).length,0);
+  const rates=[...new Set(ds.map(d=>txt(d,"samplerate")).filter(Boolean))].map(r=>`${r/1000} kHz`).join(" / ")||"Sample rate not set";
+  const ne=v.list.filter(x=>x.level==="e").length, nw=v.list.filter(x=>x.level==="w").length;
+  $("statusBar").innerHTML=`<span>${ds.length} device${ds.length===1?"":"s"}</span><span>${ntx} Tx · ${nrx} Rx channels</span><span>${nroutes} route${nroutes===1?"":"s"}</span><span>${esc(rates)}</span>`+
+    `<span class="sb-right ${ne?"e":nw?"w":""}">${ne?`${ne} error${ne>1?"s":""}`:""}${ne&&nw?", ":""}${nw?`${nw} warning${nw>1?"s":""}`:""}${!ne&&!nw?"No problems found":""}</span>`;
+  const errs=v.list.filter(x=>x.level==="e").length;
+  $("issues").innerHTML=`<h2>Checks (${v.list.length})</h2>`+(v.list.length?v.list.map(x=>`<p class="${x.level}">${esc(x.msg)}</p>`).join(""):
+    `<p class="none">All names, routes and clocking look valid.</p>`);
+  $("issues").dataset.errors=errs;
+}
+
+function renderWork(){
+  if(view==="overview") return renderOverview();
+  if(view==="info") return renderInfo();
+  const d=devices()[sel]; if(!d){$("work").innerHTML=`<p class="empty-note">No devices in this preset. Use Add devices to create some.</p>`;return;}
+  const sr=txt(d,"samplerate"), lat=txt(d,"unicast_latency");
+  const bits=[modelOf(d), txt(d,"model_version")&&`v${txt(d,"model_version")}`, sr&&`${sr/1000} kHz`, lat&&`${lat/1000} ms latency`].filter(Boolean);
+  let h=`<div class="devhead">
+    <input class="tape ${devNameProblem(devName(d))?'bad':''}" id="devNameIn" value="${esc(devName(d))}" aria-label="Device name" maxlength="31" spellcheck="false">
+    <label class="chk"><input type="checkbox" id="propChk" ${propagate?'checked':''}> Update routes that use renamed devices and channels</label>
+    <button class="btn small" id="rmDev" style="margin-left:auto">Remove device</button>
+  </div><div class="model">${esc(bits.join(" · ")||"Generic device")}</div>
+  <div class="tabs" role="tablist">
+    <button role="tab" data-tab="channels" aria-selected="${tab==="channels"}">Receive &amp; Transmit</button>
+    <button role="tab" data-tab="matrix" aria-selected="${tab==="matrix"}">Routing Grid</button>
+    <button role="tab" data-tab="settings" aria-selected="${tab==="settings"}">Device Config</button>
+    <button role="tab" data-tab="network" aria-selected="${tab==="network"}">Network Config</button>
+  </div>`;
+  h+= tab==="channels"?channelsView(d):tab==="matrix"?matrixView(d):settingsView(d,tab==="network"?"network":"config");
+  $("work").innerHTML=h;
+}
+
+/* ---------- Device Info: one row per device, like Dante Controller's Device Info tab ---------- */
+function renderInfo(){
+  const v=validate(), ds=devices(), na='<span class="na">—</span>';
+  const ip=(d,n)=>{ const i=kids(d,"interface").find(x=>x.getAttribute("network")===n); if(!i) return na;
+    const x=ipVals(i); return x.mode==="static"?esc(x.address||"Static, no address"):"Automatic"; };
+  const cell=(t,f=x=>esc(x))=>t?f(t):na;
+  const rows=ds.map((d,i)=>`<tr data-row="${i}" tabindex="0">
+    <td class="nm">${v.perDev.get(d)?'<span class="warnDot" title="Has problems"></span>':''}${esc(devName(d))}</td>
+    <td>${cell(txt(d,"manufacturer_name"))}</td><td>${txt(d,"model_name")?esc(txt(d,"model_name")):"Generic"}</td>
+    <td>${cell(txt(d,"device_type_string"))}</td><td>${cell(txt(d,"model_version"))}</td>
+    <td class="num">${cell(txt(d,"samplerate"),x=>`${x/1000} kHz`)}</td><td class="num">${cell(txt(d,"encoding"),x=>`${x}-bit`)}</td>
+    <td class="num">${cell(txt(d,"unicast_latency"),x=>`${x/1000} ms`)}</td>
+    <td>${leaderOf(d)?'<span class="pill">Preferred Leader</span>':""}</td>
+    <td>${kid(d,"redundancy")?(isTrue(kid(d,"redundancy").getAttribute("value"))?"Redundant":"Switched"):na}</td>
+    <td>${ip(d,"0")}</td><td>${ip(d,"1")}</td>
+    <td class="num">${txChans(d).length}</td><td class="num">${rxChans(d).length}</td></tr>`).join("");
+  $("work").innerHTML=`<div class="ov-head"><h2>Device Info</h2><span class="ov-stat">Click a device to open it</span></div>
+    <div class="mxwrap info"><table class="info"><thead><tr><th>Device Name</th><th>Manufacturer</th><th>Model</th><th>Dante Platform</th><th>Firmware</th>
+    <th>Sample Rate</th><th>Encoding</th><th>Latency</th><th>Clock</th><th>Redundancy</th><th>Primary IP</th><th>Secondary IP</th><th>Tx</th><th>Rx</th></tr></thead>
+    <tbody>${rows||`<tr><td colspan="14" class="na">No devices yet. Use Add devices.</td></tr>`}</tbody></table></div>`;
+}
+
+/* ---------- Routing overview: every device, like Dante Controller's routing view ---------- */
+function renderOverview(){
+  $("work").innerHTML=`<div class="ov-head"><h2>Routing</h2>
+    <input id="ovFilter" type="search" placeholder="Filter devices" value="${esc(ovFilter)}" aria-label="Filter devices" spellcheck="false">
+    <button class="btn small" id="ovExpand">Expand all</button>
+    <button class="btn small" id="ovCollapse">Collapse all</button>
+    <span class="ov-stat" id="ovStat"></span></div>
+    <div class="mxwrap ov" id="ovWrap">${ovTable()}</div>
+    <p class="mx-hint">Transmitters across the top, receivers down the side. Use + to open a device's channels, click a channel name to rename it (Tab moves to the next one), click a channel crosspoint to route or unroute it, and click a device name to edit it. Square marks summarise routes on a closed device.</p>`;
+}
+function refreshOverview(){
+  const w=$("ovWrap"); if(!w) return renderOverview();
+  const t=w.scrollTop,l=w.scrollLeft; w.innerHTML=ovTable(); w.scrollTop=t; w.scrollLeft=l;
+}
+function ovTable(){
+  const ds=devices(), f=lc(ovFilter);
+  const match=d=>!f||lc(devName(d)).includes(f)||lc(modelOf(d)).includes(f);
+  const allTx=ds.filter(d=>txChans(d).length), allRx=ds.filter(d=>rxChans(d).length);
+  let txDs=allTx.filter(match), rxDs=allRx.filter(match);
+  if(f&&!txDs.length&&!rxDs.length) return `<p class="empty-note" style="padding:12px">No devices match "${esc(ovFilter)}".</p>`;
+  // if the filter only matches one side (e.g. an amp with no Tx), keep the other side whole
+  if(!txDs.length) txDs=allTx; if(!rxDs.length) rxDs=allRx;
+  if(!txDs.length||!rxDs.length) return `<p class="empty-note" style="padding:12px">This preset has no ${!txDs.length?"transmitting":"receiving"} devices to route.</p>`;
+  // columns: each Tx device, then its channels when open
+  const cols=[];
+  for(const d of txDs){const di=ds.indexOf(d), labels=txChans(d).map(txLabel);
+    cols.push({d,di,ci:-1,labels}); if(exTx.has(d)) labels.forEach((l,ci)=>cols.push({d,di,ci,label:l}));}
+  let h=`<table class="ovt"><thead><tr><th class="corner"><div class="cx"><span class="t">Transmitters →</span><span class="r">Receivers ↓</span></div></th>`;
+  for(const c of cols){
+    if(c.ci<0) h+=`<th class="dcol"><div class="hc"><div class="v"><span class="dname" role="button" tabindex="0" data-open="${c.di}" title="Edit ${esc(devName(c.d))}">${esc(devName(c.d))}</span></div>
+      <button class="tog" data-ovtx="${c.di}" aria-expanded="${exTx.has(c.d)}" aria-label="${exTx.has(c.d)?"Close":"Open"} ${esc(devName(c.d))} channels">${exTx.has(c.d)?"−":"+"}</button></div></th>`;
+    else h+=`<th><div class="hc"><div class="v lbl" data-rtx="${c.di},${c.ci}" tabindex="0" title="${esc(c.label)}. Click to rename">${esc(c.label)}</div></div></th>`;
+  }
+  h+=`</tr></thead><tbody>`;
+  for(const rd of rxDs){
+    const rdi=ds.indexOf(rd), rcs=rxChans(rd), open=exRx.has(rd);
+    const subs=rcs.map(rc=>{const s=rxSub(rc);return {name:txt(rc,"name"),dev:s.dev,ch:s.ch,src:s.dev?srcDev(rd,s.dev):null};});
+    const routed=subs.filter(x=>x.dev).length;
+    h+=`<tr class="drow"><th><button class="tog" data-ovrx="${rdi}" aria-expanded="${open}" aria-label="${open?"Close":"Open"} ${esc(devName(rd))} channels">${open?"−":"+"}</button><button class="dname" data-open="${rdi}" title="Edit ${esc(devName(rd))}">${esc(devName(rd))}</button> <span class="ext">${routed}/${rcs.length}</span></th>`;
+    for(const c of cols){
+      const hits=subs.filter(x=>x.src===c.d&&(c.ci<0||x.ch===c.label));
+      const bad=c.ci<0&&hits.some(x=>!c.labels.includes(x.ch));
+      h+=`<td class="s${hits.length?(bad?" w":" o"):""}" data-x="${rdi},-1,${c.di},${c.ci}"></td>`;
+    }
+    h+=`</tr>`;
+    if(open) subs.forEach((x,ri)=>{
+      const ext=x.dev&&!x.src;
+      h+=`<tr class="crow"><th title="${x.dev?esc(`${x.name} ← ${x.ch}@${x.dev}${ext?" (not in this preset)":""}`):esc(x.name)}. Click the name to rename"><span class="lbl" data-rrx="${rdi},${ri}" tabindex="0">${esc(x.name)}</span>${ext?` <span class="ext">← ${esc(x.dev)}</span>`:""}</th>`;
+      for(const c of cols){
+        let cls="";
+        if(x.src===c.d){
+          if(c.ci<0) cls=" s "+(c.labels.includes(x.ch)?"o":"w");
+          else if(x.ch===c.label) cls=" o";
+          else cls="";
+          if(c.ci<0) {h+=`<td class="${cls.trim()}" data-x="${rdi},${ri},${c.di},-1"></td>`;continue;}
+        } else if(c.ci<0){h+=`<td class="s" data-x="${rdi},${ri},${c.di},-1"></td>`;continue;}
+        h+=`<td class="${cls.trim()}" data-x="${rdi},${ri},${c.di},${c.ci}"></td>`;
+      }
+      h+=`</tr>`;
+    });
+  }
+  return h+`</tbody></table>`;
+}
+function ovDescribe(td){
+  const [rdi,ri,tdi,ci]=td.dataset.x.split(",").map(Number), ds=devices(), rd=ds[rdi], sd=ds[tdi];
+  const rx=ri<0?devName(rd):`${txt(rxChans(rd)[ri],"name")}@${devName(rd)}`;
+  const tx=ci<0?devName(sd):`${txLabel(txChans(sd)[ci])}@${devName(sd)}`;
+  return `${rx} ← ${tx}`;
+}
+let ovHl=[];
+function ovHover(td){
+  ovHl.forEach(x=>x.classList.remove("hl")); ovHl=[];
+  if(!td){ $("ovStat")&&($("ovStat").textContent=""); return; }
+  const table=td.closest("table"), hc=table.tHead.rows[0].cells[td.cellIndex], rh=td.parentNode.cells[0];
+  [hc,rh].forEach(x=>{if(x){x.classList.add("hl");ovHl.push(x);}});
+  $("ovStat").textContent=ovDescribe(td);
+}
+/* rename a channel straight from the routing grid */
+function ovStartEdit(el){
+  const ds=devices(), isTx=!!el.dataset.rtx;
+  const [di,ci]=(el.dataset.rtx||el.dataset.rrx).split(",").map(Number), d=ds[di];
+  const ch=isTx?txChans(d)[ci]:rxChans(d)[ci]; if(!ch) return;
+  const old=isTx?txLabel(ch):txt(ch,"name");
+  document.getElementById("ovEdit")?.remove();
+  const inp=document.createElement("input");
+  inp.id="ovEdit"; inp.value=old; inp.maxLength=31; inp.spellcheck=false;
+  inp.setAttribute("aria-label",`Rename ${isTx?"transmit":"receive"} channel ${old} on ${devName(d)}`);
+  const r=el.getBoundingClientRect();
+  inp.style.left=Math.max(8,Math.min(r.left,innerWidth-230))+"px";
+  inp.style.top=Math.max(8,Math.min(isTx?r.bottom-28:r.top-3,innerHeight-40))+"px";
+  document.body.appendChild(inp); inp.focus(); inp.select();
+  let done=false;
+  const finish=commit=>{
+    if(done) return; done=true;
+    const v=inp.value.trim(); inp.remove();
+    if(!commit||!v||v===old) return;
+    let moved=0;
+    if(isTx) moved=renameTx(d,ch,v); else setTxt(ch,"name",v);
+    markDirty(); renderSidebar(); refreshOverview();
+    const p=chNameProblem(v);
+    toast(p?p:moved?`Renamed to ${v} and updated ${moved} route${moved>1?"s":""}`:`Renamed to ${v}`);
+  };
+  inp.addEventListener("input",()=>inp.classList.toggle("bad",!!chNameProblem(inp.value.trim())));
+  inp.addEventListener("keydown",e=>{
+    if(e.key==="Enter"){e.preventDefault();finish(true);}
+    else if(e.key==="Escape"){e.preventDefault();finish(false);}
+    else if(e.key==="Tab"){ // move to the next channel on the same device
+      e.preventDefault(); finish(true);
+      const sel_=isTx?"data-rtx":"data-rrx", n=ci+(e.shiftKey?-1:1);
+      const next=document.querySelector(`[${sel_}="${di},${n}"]`); if(next) ovStartEdit(next);
+    }
+  });
+  inp.addEventListener("blur",()=>finish(true));
+}
+function ovClick(e){
+  const lb=e.target.closest("[data-rtx],[data-rrx]"); if(lb){ovStartEdit(lb);return true;}
+  const ds=devices();
+  const o=e.target.closest("[data-open]"); if(o){sel=+o.dataset.open;view="device";tab="channels";mxTx=null;render();return true;}
+  const tt=e.target.closest("[data-ovtx]"); if(tt){const d=ds[+tt.dataset.ovtx]; exTx.has(d)?exTx.delete(d):exTx.add(d); refreshOverview(); return true;}
+  const tr=e.target.closest("[data-ovrx]"); if(tr){const d=ds[+tr.dataset.ovrx]; exRx.has(d)?exRx.delete(d):exRx.add(d); refreshOverview(); return true;}
+  if(e.target.id==="ovExpand"){
+    const n=ds.reduce((a,d)=>a+rxChans(d).length,0)*ds.reduce((a,d)=>a+txChans(d).length,0);
+    (async()=>{
+      if(n>60000&&!await ask(`That's about ${n.toLocaleString()} crosspoints and may be slow to draw. Expand everything anyway?`)) return;
+      ds.forEach(d=>{exTx.add(d);exRx.add(d);}); refreshOverview();
+    })(); return true;}
+  if(e.target.id==="ovCollapse"){exTx.clear();exRx.clear();refreshOverview();return true;}
+  const td=e.target.closest("td[data-x]"); if(!td) return false;
+  const [rdi,ri,tdi,ci]=td.dataset.x.split(",").map(Number), rd=ds[rdi], sd=ds[tdi];
+  if(ri<0||ci<0){ // summary cell: open whichever side is closed
+    if(ri<0) exRx.add(rd); if(ci<0) exTx.add(sd); refreshOverview(); return true; }
+  const rc=rxChans(rd)[ri], tc=txChans(sd)[ci];
+  if(td.classList.contains("o")) setSub(rc,"",""); else setSub(rc,devName(sd),txLabel(tc));
+  markDirty(); renderSidebar(); refreshOverview();
+  const again=document.querySelector(`td[data-x="${td.dataset.x}"]`); if(again) ovHover(again);
+  return true;
+}
+
+function channelsView(d){
+  const tx=txChans(d), rx=rxChans(d);
+  const dl=`<datalist id="dlDevs">${devices().map(x=>`<option value="${esc(devName(x))}">`).join("")}</datalist>`;
+  const txRows=tx.length?tx.map((tc,i)=>`<tr><td class="id">${esc(chId(tc))}</td>
+    <td><input class="tape ${chNameProblem(txLabel(tc))?'bad':''}" data-tx="${i}" value="${esc(txLabel(tc))}" maxlength="31" spellcheck="false" aria-label="Transmit channel ${esc(chId(tc))} name"></td></tr>`).join("")
+    :`<tr><td class="empty-note">No transmit channels</td></tr>`;
+  const rxRows=rx.length?rx.map((rc,i)=>{
+    const s=rxSub(rc), sd=s.dev?srcDev(d,s.dev):null;
+    const chOk=sd&&txChans(sd).some(t=>txLabel(t)===s.ch);
+    const ledCls=!s.dev&&!s.ch?"":(chOk?"on":(sd?"warn":"on"));
+    const opts=sd?txChans(sd).map(t=>`<option value="${esc(txLabel(t))}">`).join(""):"";
+    return `<tr><td class="id">${esc(chId(rc))}</td>
+      <td style="width:28%"><input class="tape ${chNameProblem(txt(rc,"name"))?'bad':''}" data-rxname="${i}" value="${esc(txt(rc,"name"))}" maxlength="31" spellcheck="false" aria-label="Receive channel ${esc(chId(rc))} name"></td>
+      <td><span class="led ${ledCls}"></span></td>
+      <td><input class="src" data-rxch="${i}" list="dlCh${i}" value="${esc(s.ch)}" placeholder="Channel" spellcheck="false" aria-label="Source channel"><datalist id="dlCh${i}">${opts}</datalist></td>
+      <td>@</td>
+      <td><input class="src ${s.dev&&!sd?'unres':''}" data-rxdev="${i}" list="dlDevs" value="${esc(s.dev)}" placeholder="Device" spellcheck="false" aria-label="Source device" title="${s.dev&&!sd?'Not in this preset':''}"></td>
+      <td><button class="clear" data-rxclear="${i}" title="Remove subscription" aria-label="Remove subscription">✕</button></td></tr>`;
+  }).join(""):`<tr><td class="empty-note">No receive channels</td></tr>`;
+  return `${dl}<div class="copyrow"><button class="btn small" id="copyNamesBtn">Copy names…</button></div><div class="cols">
+    <div><h3>Transmit channels</h3><table>${txRows}</table></div>
+    <div><h3>Receive channels and their sources</h3>
+      <table><thead><tr><th></th><th>Name</th><th></th><th>Source channel</th><th></th><th>Source device</th><th></th></tr></thead>${rxRows}</table></div>
+  </div>`;
+}
+
+function matrixView(d){
+  const rx=rxChans(d), ds=devices();
+  if(mxTx===null||mxTx>=ds.length) mxTx=ds.findIndex(x=>x!==d&&txChans(x).length); if(mxTx<0) mxTx=0;
+  const src=ds[mxTx], tx=txChans(src), sn=lc(devName(src));
+  if(!rx.length) return `<p class="empty-note">${esc(devName(d))} has no receive channels to route.</p>`;
+  const sel_=`<select id="mxSrc" aria-label="Transmitting device">${ds.map((x,i)=>`<option value="${i}" ${i===mxTx?'selected':''}>${esc(devName(x))} (${txChans(x).length} Tx)</option>`).join("")}</select>`;
+  let t=`<div class="mx-controls">Receiving: <strong>${esc(devName(d))}</strong> &nbsp; Transmitting: ${sel_}</div>`;
+  if(!tx.length) return t+`<p class="empty-note">${esc(devName(src))} has no transmit channels.</p>`;
+  t+=`<div class="mxwrap"><table class="mx"><thead><tr><th class="corner">Rx ↓ &nbsp; Tx →</th>${tx.map(tc=>`<th><div class="v" title="${esc(txLabel(tc))}">${esc(txLabel(tc))}</div></th>`).join("")}</tr></thead><tbody>`;
+  rx.forEach((rc,ri)=>{
+    const s=rxSub(rc), here=lc(s.dev)===sn||(s.dev==="."&&src===d);
+    const elsewhere=s.dev&&!here;
+    t+=`<tr><th title="${elsewhere?esc(`Currently from ${s.ch}@${s.dev}`):''}">${esc(txt(rc,"name"))}${elsewhere?' <span style="color:var(--muted)">•</span>':''}</th>`;
+    tx.forEach((tc,ti)=>{
+      const on=here&&s.ch===txLabel(tc);
+      t+=`<td><button data-mx="${ri},${ti}" aria-pressed="${on}" aria-label="${esc(txt(rc,"name"))} from ${esc(txLabel(tc))}"><span class="led ${on?'on':''}"></span></button></td>`;
+    });
+    t+=`</tr>`;
+  });
+  return t+`</tbody></table></div><p class="mx-hint">Click a crosspoint to route it; click a lit one to unroute. Each receive channel takes one source, so routing replaces any existing one. A dot next to a name means it's fed from another device.</p>`;
+}
+
+/* ---------- Device settings: only what the device's XML actually carries ---------- */
+const CAPTURE_NAMES={device_name:"Name",device_redundancy:"Redundancy Configuration",device_switch_vlan:"Switch VLAN",
+  interface_ipv4_addresses:"Interface IPv4 Addresses",device_samplerate:"Sample Rate",device_clock_pullup:"Sample Rate Pull-up",
+  device_encoding:"Encoding",device_unicast_latency:"Device Latency",rtp:"RTP Configuration",clock:"Clock Configuration",
+  clock_priority:"Clock Priority",device_external_word_clock:"External Word Clock Setting",device_haremote_bridge_mode:"HaRemote Bridge Mode",
+  device_codec:"Codec",txchannel_names:"TX Channel Labels",txflows:"TX Flows",rxchannel_names:"RX Channel Labels",
+  rxchannel_subscriptions:"RX Subscriptions",rxflows:"RX Flows"};
+const CLOCK_LABELS={subdomain_name:"PTP subdomain",v1_enabled:"PTP v1 enabled",v2_enabled:"PTP v2 enabled",
+  v1_unicast_delay_requests:"PTP v1 unicast delay requests",v2_unicast_delay_requests:"PTP v2 unicast delay requests",
+  preferred:"Preferred leader",follower_only:"Follower only",interop_mode:"AES67 / interop mode",aes67_multicast_address_prefix:"AES67 multicast prefix"};
+const SR=[44100,48000,88200,96000,176400,192000], ENC=[16,24,32], LAT=[250,500,1000,2000,5000];
+
+function selRow(label,path,kind,opts,cur,fmt){
+  const list=opts.map(String); if(cur&&!list.includes(cur)) list.push(cur);
+  return `<label class="srow"><span>${label}</span><select data-path="${path}" data-kind="${kind}">${list.map(o=>`<option value="${o}" ${o===cur?'selected':''}>${fmt(o)}</option>`).join("")}</select></label>`;
+}
+const chkRow=(label,path,kind,on)=>`<label class="srow"><span>${label}</span><input type="checkbox" data-path="${path}" data-kind="${kind}" ${on?'checked':''}></label>`;
+const txtRow=(label,path,kind,v,type="text")=>`<label class="srow"><span>${label}</span><input type="${type}" data-path="${path}" data-kind="${kind}" value="${esc(v)}" spellcheck="false"></label>`;
+const roRow=(label,v)=>`<div class="srow"><span>${label}</span><span class="ro">${esc(v)}</span></div>`;
+
+/* renders every child of a block like <clock> or <clock_priority>: true/false become tickboxes, the rest text */
+function blockRows(d,tag){
+  const b=kid(d,tag); if(!b) return "";
+  return [...b.children].map(c=>{
+    const k=c.localName, label=CLOCK_LABELS[k]||k.replace(/_/g," "), v=c.textContent, path=`${tag}/${k}`;
+    if(v==="true"||v==="false") return chkRow(label,path,"bool-text",v==="true");
+    if(k==="interop_mode"||k==="aes67_multicast_address_prefix") return roRow(label,v);
+    return txtRow(label,path,"text",v);
+  }).join("");
+}
+
+/* IP addressing: format taken from a Dante Controller export
+   <ipv4_address mode="static"><address/><netmask/><gateway/><dnsserver/></ipv4_address> */
+const IPF=[["address","IP address",true],["netmask","Subnet mask",true],["gateway","Gateway",false],["dnsserver","DNS server",false]];
+const ifaceName=net=>net==="0"?"Primary":net==="1"?"Secondary":`Interface ${net}`;
+const ipStash=new WeakMap();
+function ipOk(s){const m=/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);return !!m&&m.slice(1).every(x=>+x<=255&&String(+x)===x);}
+const ipInt=s=>s.split(".").reduce((a,x)=>((a<<8)>>>0)+ +x,0)>>>0;
+function maskOk(s){if(!ipOk(s))return false;const m=ipInt(s);if(!m)return false;const inv=(~m)>>>0;return ((inv+1)&inv)===0;}
+function ipVals(iface){
+  const ip=kid(iface,"ipv4_address"), v={mode:ip?ip.getAttribute("mode")||"dynamic":"dynamic"};
+  IPF.forEach(([f])=>v[f]=ip?txt(ip,f):"");
+  return v;
+}
+function writeIp(iface,v){
+  let ip=kid(iface,"ipv4_address");
+  const D=iface.ownerDocument;
+  if(!ip) ip=appendEl(iface,D.createElementNS(iface.namespaceURI,"ipv4_address"));
+  ip.setAttribute("mode",v.mode);
+  while(ip.firstChild) ip.removeChild(ip.firstChild);
+  if(v.mode!=="static") return;
+  const pre=ip.previousSibling, base=(pre&&pre.nodeType===3?pre.nodeValue:"\n            ");
+  const inner=base+"    ";
+  IPF.forEach(([f,,req])=>{
+    if(!req&&!v[f]) return;           // optional fields are left out when blank
+    ip.appendChild(D.createTextNode(inner));
+    const e=D.createElementNS(ip.namespaceURI,f); e.textContent=v[f]; ip.appendChild(e);
+  });
+  ip.appendChild(D.createTextNode(base));
+}
+function addIface(d){
+  const D=d.ownerDocument;
+  const nets=kid(d,"redundancy")?["0","1"]:["0"];
+  const before=kid(d,"txflow")||kid(d,"txchannel")||kid(d,"rxchannel")||kid(d,"rtp")||kid(d,"clock")||kid(d,"clock_priority");
+  const ref=before;
+  nets.forEach(n=>{
+    const i=D.createElementNS(d.namespaceURI,"interface"); i.setAttribute("network",n);
+    const ip=D.createElementNS(d.namespaceURI,"ipv4_address"); ip.setAttribute("mode","dynamic");
+    const pad=(before&&before.previousSibling&&before.previousSibling.nodeType===3)?before.previousSibling.nodeValue:"\n        ";
+    i.appendChild(D.createTextNode(pad+"    ")); i.appendChild(ip); i.appendChild(D.createTextNode(pad));
+    if(ref){d.insertBefore(i,ref); d.insertBefore(D.createTextNode(pad),ref);} else appendEl(d,i);
+  });
+  const ci=kid(d,"captureInfo");
+  if(ci&&!kid(ci,"interface_ipv4_addresses")){
+    const e=D.createElementNS(ci.namespaceURI,"interface_ipv4_addresses");
+    const after=kid(ci,"device_switch_vlan")||kid(ci,"device_redundancy")||kid(ci,"device_name");
+    if(after){const ws=after.previousSibling; ci.insertBefore(e,after.nextSibling); ci.insertBefore(D.createTextNode(ws&&ws.nodeType===3?ws.nodeValue:"\n"),e);}
+    else appendEl(ci,e);
+  }
+}
+
+function settingsView(d,part="config"){
+  const g=[];
+  // Audio
+  let a="";
+  if(kid(d,"samplerate")) a+=selRow("Sample rate","samplerate","text",SR,txt(d,"samplerate"),v=>`${v/1000} kHz`);
+  if(kid(d,"encoding")) a+=selRow("Encoding","encoding","text",ENC,txt(d,"encoding"),v=>`${v}-bit`);
+  if(kid(d,"unicast_latency")) a+=selRow("Device latency","unicast_latency","text",LAT,txt(d,"unicast_latency"),v=>`${v/1000} ms`);
+  if(kid(d,"clock_pullup")) a+=roRow("Sample rate pull-up",kid(d,"clock_pullup").getAttribute("value")==="0"?"None":`Setting ${kid(d,"clock_pullup").getAttribute("value")}`);
+  if(a&&part==="config") g.push(`<div class="sgroup"><h3>Audio</h3>${a}</div>`);
+  // Clocking: just preferred leader. Some devices store it in two places, so one tickbox sets both
+  const pm=kid(d,"preferred_master"), cpp=kid(kid(d,"clock_priority"),"preferred");
+  if((pm||cpp)&&part==="config") g.push(`<div class="sgroup"><h3>Clocking</h3><label class="srow"><span>Preferred leader</span><input type="checkbox" id="prefLeader" ${leaderOf(d)?'checked':''}></label></div>`);
+  // Network
+  let n="";
+  const rd=kid(d,"redundancy"); if(rd) n+=chkRow("Redundancy","redundancy","bool-attr",isTrue(rd.getAttribute("value")));
+  const sv=kid(d,"switch_vlan"); if(sv) n+=txtRow("Switch VLAN configuration","switch_vlan","attr",sv.getAttribute("value"),"number");
+  const ifs=kids(d,"interface");
+  ifs.forEach((i,ix)=>{
+    const net=i.getAttribute("network"), v=ipVals(i), st=v.mode==="static";
+    n+=`<div class="ipblock"><label class="srow"><span>${ifaceName(net)} IP</span><select data-ipmode="${ix}">
+      <option value="dynamic" ${st?'':'selected'}>Automatic (DHCP)</option><option value="static" ${st?'selected':''}>Static</option></select></label>`;
+    if(st) IPF.forEach(([f,label,req])=>{
+      const val=v[f], bad=val?(f==="netmask"?!maskOk(val):!ipOk(val)):req;
+      n+=`<label class="srow sub"><span>${label}${req?'':' <small>(optional)</small>'}</span><input type="text" inputmode="decimal" spellcheck="false" data-ipf="${ix}" data-f="${f}" value="${esc(val)}" placeholder="${f==="netmask"?"255.255.255.0":"0.0.0.0"}" class="${bad?'bad':''}" aria-label="${ifaceName(net)} ${label}"></label>`;
+    });
+    if(!st) n+=`<p class="note">Dante Controller won't switch a device from static back to DHCP with a preset. If this device is currently static, change it in Device View → Network Config instead.</p>`;
+    n+=`</div>`;
+  });
+  if(ifs.length) n+=`<p class="note">Changing addressing reboots the device when the preset is applied. A static address outside your computer's subnet will cut Dante Controller off from it.</p>`;
+  else if(kid(d,"captureInfo")||!txt(d,"model_id")) n+=`<button class="btn small" id="addIface" style="margin-top:4px">Add IP settings to this device</button>
+    <p class="note">This device's preset has no IP settings. Dante Controller only applies them if the target device supports static addressing.</p>`;
+  if(kid(d,"rtp")) n+=blockRows(d,"rtp");
+  if(part==="network") return n?`<div class="sgrid"><div class="sgroup"><h3>Network</h3>${n}</div></div>`:`<p class="empty-note">This device has no network settings in the preset.</p>`;
+  // Identity
+  let id="";
+  [["Manufacturer","manufacturer_name"],["Model","model_name"],["Firmware","model_version"],["Dante platform","device_type_string"],["Default name","default_name"]]
+    .forEach(([l,t])=>{if(txt(d,t)) id+=roRow(l,txt(d,t));});
+  const did=txt(kid(d,"instance_id"),"device_id"); if(did) id+=roRow("Device ID",did);
+  if(!id) id=`<p class="note">This is a generic device with no hardware identity. Dante Controller will let you apply it as a role to a device you choose.</p>`;
+  g.push(`<div class="sgroup"><h3>Identity</h3>${id}</div>`);
+  // Capture
+  const ci=kid(d,"captureInfo");
+  g.push(`<div class="sgroup"><h3>Preset elements this device carries</h3>${ci?`<div class="chips">${[...ci.children].map(x=>`<span class="chip">${esc(CAPTURE_NAMES[x.localName]||x.localName)}</span>`).join("")}</div>
+    <p class="note">These are what Dante Controller can tick under Preset Elements when applying this device's role.</p>`:
+    `<p class="note">No element list. Dante Controller will grey out most Preset Elements for this device.</p>`}</div>`);
+  return `<div class="sgrid">${g.join("")}</div>`;
+}
+function applySetting(d,el){
+  const path=el.dataset.path.split("/"), kind=el.dataset.kind;
+  let node=d; for(const p of path){node=kid(node,p); if(!node) return false;}
+  const val=el.type==="checkbox"?(el.checked?"true":"false"):el.value.trim();
+  if(kind==="text"||kind==="bool-text") node.textContent=val;
+  else if(kind==="attr"||kind==="bool-attr") node.setAttribute("value",val);
+  return true;
+}
+
+/* ---------- Events ---------- */
+$("devList").addEventListener("click",e=>{const li=e.target.closest("li");if(!li)return;sel=+li.dataset.i;view="device";mxTx=null;render();});
+$("viewTabs").addEventListener("click",e=>{
+  const b=e.target.closest("[data-view]"); if(!b||b.disabled||!doc) return;
+  view=b.dataset.view; if(view==="device") mxTx=null; render();
+});
+$("devList").addEventListener("keydown",e=>{
+  if(e.key==="Enter"||e.key===" "){e.preventDefault();e.target.click();}
+  if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();sel=Math.max(0,Math.min(devices().length-1,sel+(e.key==="ArrowDown"?1:-1)));view="device";mxTx=null;render();$("devList").children[sel]?.focus();}
+});
+
+$("work").addEventListener("click",e=>{
+  if(view==="overview"){ovClick(e);return;}
+  if(view==="info"){ const r=e.target.closest("[data-row]"); if(r){sel=+r.dataset.row;view="device";tab="channels";mxTx=null;render();} return; }
+  const t=e.target.closest("[data-tab]"); if(t){tab=t.dataset.tab;renderWork();return;}
+  if(e.target.id==="copyNamesBtn"){ openCopyNames(); return; }
+  if(e.target.id==="addIface"){ addIface(devices()[sel]); markDirty(); render(); return; }
+  if(e.target.id==="rmDev"){
+    const d=devices()[sel];
+    (async()=>{
+      if(!await ask(`Remove ${devName(d)} from the preset? Routes other devices take from it will be left pointing at a device that isn't in the preset.`)) return;
+      const p=d.previousSibling; if(p&&p.nodeType===3&&!p.nodeValue.trim()) p.remove();
+      d.remove(); sel=Math.max(0,sel-1); mxTx=null; markDirty(); render();
+    })(); return;
+  }
+  const c=e.target.closest("[data-rxclear]"); if(c){setSub(rxChans(devices()[sel])[+c.dataset.rxclear],"","");markDirty();render();return;}
+  const m=e.target.closest("[data-mx]"); if(m){
+    const [ri,ti]=m.dataset.mx.split(",").map(Number), d=devices()[sel], src=devices()[mxTx];
+    const rc=rxChans(d)[ri], tc=txChans(src)[ti];
+    if(m.getAttribute("aria-pressed")==="true") setSub(rc,"",""); else setSub(rc,devName(src),txLabel(tc));
+    markDirty(); render(); document.querySelector(`[data-mx="${ri},${ti}"]`)?.focus();
+  }
+});
+$("work").addEventListener("change",e=>{
+  const el=e.target, d=devices()[sel]; if(!d) return;
+  if(el.id==="propChk"){propagate=el.checked;return;}
+  if(el.id==="mxSrc"){mxTx=+el.value;renderWork();return;}
+  if(el.id==="prefLeader"){
+    const v=el.checked?"true":"false", pm=kid(d,"preferred_master"), cpp=kid(kid(d,"clock_priority"),"preferred");
+    if(pm) pm.setAttribute("value",v); if(cpp) cpp.textContent=v;
+    markDirty(); render(); return;
+  }
+  if(el.dataset.path){ if(applySetting(d,el)){markDirty();render();} return; }
+  if(el.dataset.ipmode!==undefined){
+    const i=kids(d,"interface")[+el.dataset.ipmode], v=ipVals(i);
+    if(el.value==="dynamic"){ if(v.mode==="static") ipStash.set(i,v); v.mode="dynamic"; }
+    else { Object.assign(v,ipStash.get(i)||{}); v.mode="static"; }
+    writeIp(i,v); markDirty(); render();
+    if(v.mode==="static") document.querySelector(`[data-ipf="${el.dataset.ipmode}"][data-f="address"]`)?.focus();
+    return;
+  }
+  if(el.dataset.ipf!==undefined){
+    const i=kids(d,"interface")[+el.dataset.ipf], v=ipVals(i);
+    v[el.dataset.f]=el.value.trim(); writeIp(i,v); markDirty(); render(); return;
+  }
+  const v=el.value.trim();
+  let moved=0;
+  if(el.id==="devNameIn"){ if(!v){el.value=devName(d);return;} moved=renameDevice(d,v); }
+  else if(el.dataset.tx!==undefined) moved=renameTx(d,txChans(d)[+el.dataset.tx],v);
+  else if(el.dataset.rxname!==undefined) setTxt(rxChans(d)[+el.dataset.rxname],"name",v);
+  else if(el.dataset.rxch!==undefined||el.dataset.rxdev!==undefined){
+    const i=+(el.dataset.rxch??el.dataset.rxdev), rc=rxChans(d)[i], s=rxSub(rc);
+    if(el.dataset.rxch!==undefined) s.ch=v; else s.dev=v;
+    setSub(rc,s.dev,s.ch);
+  } else return;
+  markDirty(); render();
+  if(moved) toast(`Updated ${moved} route${moved>1?"s":""} to match`);
+});
+$("work").addEventListener("input",e=>{ if(e.target.id==="ovFilter"){ovFilter=e.target.value;refreshOverview();} });
+$("work").addEventListener("mouseover",e=>{ if(view==="overview") ovHover(e.target.closest("td[data-x]")); });
+$("work").addEventListener("mouseleave",()=>{ if(view==="overview") ovHover(null); });
+$("work").addEventListener("keydown",e=>{
+  if(view==="info"&&(e.key==="Enter"||e.key===" ")&&e.target.matches("[data-row]")){e.preventDefault();e.target.click();return;}
+  if(view!=="overview") return;
+  if((e.key==="Enter"||e.key==="F2")&&e.target.matches("[data-rtx],[data-rrx]")){e.preventDefault();ovStartEdit(e.target);}
+  else if((e.key==="Enter"||e.key===" ")&&e.target.matches("span[data-open]")){e.preventDefault();e.target.click();}
+});
+document.getElementById("ovWrap")||0;
+document.addEventListener("scroll",()=>document.getElementById("ovEdit")?.blur(),true);
+$("work").addEventListener("keydown",e=>{ if(e.key==="Enter"&&e.target.matches("input.tape,input.src,input[data-ipf]")) e.target.blur(); });
+
+$("presetName").addEventListener("change",e=>{setTxt(root(),"name",e.target.value);markDirty();});
+$("presetDesc").addEventListener("change",e=>{setTxt(root(),"description",e.target.value);markDirty();});
+
+/* ---------- Files: open, save over, save as ----------
+   Three ways this page can run:
+   1. Inside the desktop app (Tauri, Mac and Windows): native dialogs and files through Rust commands.
+   2. Chrome / Edge: the File System Access API keeps hold of the opened file so Save can overwrite it.
+   3. Safari / Firefox: open with a file input, save by downloading a copy.
+   The open file is kept as {name, read(), write(text)} so Save, Save as and Revert work the same in all three. */
+const APP=!!(window.__TAURI__&&window.__TAURI__.core);
+const invoke=(cmd,args)=>window.__TAURI__.core.invoke(cmd,args);
+const baseName=p=>String(p).split(/[\\/]/).pop();
+const dirName=p=>{const i=Math.max(p.lastIndexOf("/"),p.lastIndexOf("\\"));return i>0?p.slice(0,i):null;};
+let fileHandle=null;
+const FS_OK=APP||(typeof window.showOpenFilePicker==="function"&&typeof window.showSaveFilePicker==="function");
+const XML_TYPES=[{description:"Dante preset",accept:{"application/xml":[".xml"]}}];
+async function ask(msg){ return APP ? !!(await invoke("ask_dialog",{message:msg})) : confirm(msg); }
+function webFile(h){ return {name:h.name, handle:h, read:async()=>(await h.getFile()).text(), write:t=>writeTo(h,t)}; }
+function nativeFile(path){ return {name:baseName(path), path, read:()=>invoke("read_file",{path}), write:t=>invoke("write_file",{path,contents:t})}; }
+async function openFileObj(f){
+  const text=await f.read();
+  if(load(text,f.name)){fileHandle=f; updateTitle(); return true;}
+  return false;
+}
+async function openPath(path){
+  try{ await openFileObj(nativeFile(path)); }catch(e){ toast(`Couldn't open ${baseName(path)}: ${e.message||e}`); }
+}
+async function pick(){
+  if(dirty&&!await ask("Discard unsaved changes?")) return;
+  if(APP){
+    try{ const p=await invoke("open_dialog",{dir:fileHandle&&fileHandle.path?dirName(fileHandle.path):null}); if(p) await openPath(p); }
+    catch(e){ toast(`Couldn't open: ${e.message||e}`); }
+    return;
+  }
+  if(!FS_OK){ $("file").click(); return; }
+  try{ const [h]=await showOpenFilePicker({types:XML_TYPES,multiple:false}); await openFileObj(webFile(h)); }
+  catch(e){ if(e.name!=="AbortError"){ toast("Couldn't open that file here, trying the basic picker"); $("file").click(); } }
+}
+$("openBtn").onclick=pick; $("openBtn2").onclick=pick;
+$("file").onchange=e=>{const f=e.target.files[0]; if(f){ readFile(f,()=>{fileHandle=null;updateTitle();}); } e.target.value="";};
+async function checkErrors(){
+  return !(+$("issues").dataset.errors>0) || await ask("Some names or routes break Dante's rules and may not import cleanly. Save anyway?");
+}
+async function writeTo(h,text){
+  if(h.queryPermission&&await h.queryPermission({mode:"readwrite"})!=="granted"){
+    if(await h.requestPermission({mode:"readwrite"})!=="granted") throw Object.assign(new Error("denied"),{name:"NotAllowedError"});
+  }
+  const w=await h.createWritable(); await w.write(text); await w.close();
+}
+function savedOK(text,name){ originalText=text; fileName=name; markClean(); toast(`Saved ${name}`); }
+async function save(){
+  if(!doc||!await checkErrors()) return;
+  if(!fileHandle) return saveAs(true);
+  const text=serialize();
+  try{ await fileHandle.write(text); savedOK(text,fileHandle.name); }
+  catch(e){
+    if(e&&e.name==="NotAllowedError"){ toast("Permission to save over the file was refused. Choose where to save instead"); return saveAs(true); }
+    toast(`Couldn't save: ${e.message||e}`);
+  }
+}
+async function saveAs(checked){
+  if(!doc||(!checked&&!await checkErrors())) return;
+  const text=serialize(), suggested=fileHandle?fileHandle.name:(fileName||outName());
+  if(APP){
+    try{
+      let p=await invoke("save_dialog",{suggested,dir:fileHandle&&fileHandle.path?dirName(fileHandle.path):null});
+      if(!p) return;
+      if(!/\.xml$/i.test(p)) p+=".xml";
+      const f=nativeFile(p); await f.write(text); fileHandle=f; savedOK(text,f.name);
+    }catch(e){ toast(`Couldn't save: ${e.message||e}`); }
+    return;
+  }
+  if(!FS_OK){ // Safari / Firefox: the best they can do is download a copy
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([text],{type:"application/xml"}));
+    a.download=suggested; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+    originalText=text; markClean(); toast(`Downloaded ${a.download}. Open this editor in Chrome or Edge to save over files directly`);
+    return;
+  }
+  try{
+    const h=await showSaveFilePicker({suggestedName:suggested,types:XML_TYPES,startIn:(fileHandle&&fileHandle.handle)||"documents"});
+    const f=webFile(h); await f.write(text); fileHandle=f; savedOK(text,f.name);
+  }catch(e){ if(e.name!=="AbortError") toast(`Couldn't save: ${e.message}`); }
+}
+async function revert(){
+  if(!doc) return;
+  if(dirty&&!await ask("Discard all changes and go back to the last saved version?")) return;
+  if(fileHandle){ try{ await openFileObj(fileHandle); return; }catch{} }
+  const h=fileHandle; if(load(originalText,fileName)){ fileHandle=h; updateTitle(); }
+}
+$("saveBtn").onclick=()=>save();
+$("saveAsBtn").onclick=()=>saveAs(false);
+$("revertBtn").onclick=()=>revert();
+
+/* Menu items (desktop app) and keyboard shortcuts both come through here.
+   A short guard stops one key press running twice where the menu and the page both see it. */
+const ACTIONS={
+  new:()=>openNew("new"), open:()=>pick(), save:()=>save(), save_as:()=>saveAs(false), revert:()=>revert(),
+  overview:()=>{ if(doc){view="overview";render();} },
+  add_devices:()=>{ if(doc) openNew("add"); },
+  copy_xml:()=>{ if(doc) $("copyBtn").click(); }
+};
+const lastRun={};
+function runAction(id){
+  const now=Date.now(); if(lastRun[id]&&now-lastRun[id]<500) return; lastRun[id]=now;
+  document.activeElement?.blur?.();   // commit any half-typed name first
+  ACTIONS[id]&&ACTIONS[id]();
+}
+document.addEventListener("keydown",e=>{
+  if(!(e.metaKey||e.ctrlKey)||e.altKey) return;
+  const k=e.key.toLowerCase();
+  if(k==="s"){ e.preventDefault(); runAction(e.shiftKey?"save_as":"save"); }
+  else if(k==="o"&&!e.shiftKey){ e.preventDefault(); runAction("open"); }
+  else if(APP&&k==="n"&&!e.shiftKey){ e.preventDefault(); runAction("new"); }
+});
+
+function serialize(){
+  let s=new XMLSerializer().serializeToString(doc);
+  s=s.replace(/^<\?xml[^?]*\?>\s*/,"");
+  return decl+"\n"+s+"\n";
+}
+const safeFile=n=>n.replace(/[\\/:*?"<>|]+/g,"_");
+function outName(){const n=txt(root(),"name").trim(); return n?safeFile(n)+".xml":fileName;}
+$("copyBtn").onclick=async()=>{
+  const s=serialize();
+  try{await navigator.clipboard.writeText(s);toast("XML copied");}
+  catch{const t=document.createElement("textarea");t.value=s;document.body.appendChild(t);t.select();
+    try{document.execCommand("copy");toast("XML copied");}catch{toast("Couldn't copy. Use Save instead");} t.remove();}
+};
+
+const box=$("dropbox");
+["dragenter","dragover"].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();box.classList.add("over");}));
+["dragleave","drop"].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();if(ev==="drop"||e.target===document.documentElement)box.classList.remove("over");}));
+document.addEventListener("drop",e=>{
+  if(APP) return;   // the desktop app handles dropped files natively
+  const item=e.dataTransfer?.items?.[0], f=e.dataTransfer?.files?.[0]; if(!f) return;
+  if(dirty&&!confirm("Discard unsaved changes?")) return;
+  const hp=item&&item.getAsFileSystemHandle?item.getAsFileSystemHandle():null; // must be asked for during the drop
+  if(hp) hp.then(h=>h&&h.kind==="file"?openFileObj(webFile(h)):Promise.reject()).catch(()=>readFile(f,()=>{fileHandle=null;updateTitle();}));
+  else readFile(f,()=>{fileHandle=null;updateTitle();});
+});
+if(!APP) window.addEventListener("beforeunload",e=>{if(dirty){e.preventDefault();e.returnValue="";}});
+
+/* ---------- Desktop app wiring (Tauri) ---------- */
+if(APP){
+  const ev=window.__TAURI__.event;
+  ev.listen("menu",e=>runAction(e.payload));
+  ev.listen("open-paths",async e=>{
+    const p=(e.payload||[]).find(x=>/\.xml$/i.test(x))||(e.payload||[])[0]; if(!p) return;
+    if(dirty&&!await ask("Discard unsaved changes?")) return;
+    openPath(p);
+  });
+  let closing=false;   // ignore repeat close requests while the question is showing
+  ev.listen("close-requested",async()=>{
+    if(closing) return; closing=true;
+    try{ if(!dirty||await ask("You have unsaved changes. Close without saving?")) invoke("close_app"); }
+    finally{ closing=false; }
+  });
+  // tell the app we're listening, and open any file it was launched with (Open With, double-click, drag onto the icon)
+  invoke("frontend_ready").then(paths=>{ if(paths&&paths.length) openPath(paths[0]); }).catch(()=>{});
+  updateTitle();
+}
+
+let tt; function toast(m){const t=$("toast");t.textContent=m;t.style.display="block";clearTimeout(tt);tt=setTimeout(()=>t.style.display="none",2600);}
+
+/* ---------- Copy channel names between Tx and Rx ---------- */
+function cleanName(n){ return n.replace(/[=.@]/g,"-").trim().slice(0,31); }
+function cnPlan(d,mode){
+  const ch=[], notes=[];
+  const byId=list=>new Map(list.map(c=>[chId(c),c]));
+  if(mode==="rxFromSrc"){
+    for(const rc of rxChans(d)){const s=rxSub(rc); if(s.ch) ch.push({kind:"rx",dev:d,el:rc,from:txt(rc,"name"),to:cleanName(s.ch)});}
+    if(!ch.length) notes.push("None of this device's receive channels are routed yet.");
+  } else if(mode==="srcFromRx"){
+    const taken=new Map();
+    for(const rc of rxChans(d)){
+      const s=rxSub(rc); if(!s.ch) continue;
+      const sd=srcDev(d,s.dev), tc=sd&&txChans(sd).find(t=>txLabel(t)===s.ch);
+      if(!tc){ notes.push(`${txt(rc,"name")}: its source ${s.ch}@${s.dev} isn't in this preset, so it's skipped.`); continue; }
+      if(taken.has(tc)){ notes.push(`${s.ch}@${devName(sd)} feeds more than one channel, so it's named after ${taken.get(tc)} only.`); continue; }
+      taken.set(tc,txt(rc,"name"));
+      ch.push({kind:"tx",dev:sd,el:tc,from:s.ch,to:cleanName(txt(rc,"name"))});
+    }
+    if(!ch.length&&!notes.length) notes.push("None of this device's receive channels are routed yet.");
+  } else {
+    const tx=byId(txChans(d)), rx=byId(rxChans(d));
+    if(!tx.size||!rx.size) notes.push(`${devName(d)} has no ${!tx.size?"transmit":"receive"} channels to copy ${mode==="txToRx"?(!tx.size?"from":"to"):(!rx.size?"from":"to")}.`);
+    for(const [id,tc] of tx){ const rc=rx.get(id); if(!rc) continue;
+      if(mode==="txToRx") ch.push({kind:"rx",dev:d,el:rc,from:txt(rc,"name"),to:cleanName(txLabel(tc))});
+      else ch.push({kind:"tx",dev:d,el:tc,from:txLabel(tc),to:cleanName(txt(rc,"name"))}); }
+  }
+  // Dante needs unique names within each device and direction: number any repeats
+  const groups=new Map();
+  for(const c of ch){const k=(c.kind==="tx"?"t":"r")+devices().indexOf(c.dev); if(!groups.has(k))groups.set(k,[]); groups.get(k).push(c);}
+  for(const [k,list] of groups){
+    const dv=list[0].dev, all=k[0]==="t"?txChans(dv):rxChans(dv), changing=new Set(list.map(c=>c.el));
+    const used=new Set(all.filter(c=>!changing.has(c)).map(c=>lc(k[0]==="t"?txLabel(c):txt(c,"name"))));
+    for(const c of list){
+      if(!c.to){c.to=c.from;continue;}
+      let n=c.to, i=2; while(used.has(lc(n))){const suf=" "+i++; n=c.to.slice(0,31-suf.length)+suf;}
+      if(n!==c.to) c.renumbered=true;
+      c.to=n; used.add(lc(n));
+    }
+  }
+  return {changes:ch.filter(c=>c.to!==c.from),notes,renumbered:ch.some(c=>c.renumbered)};
+}
+function cnMode(){ return document.querySelector('input[name="cnMode"]:checked').value; }
+function cnDraw(){
+  const d=devices()[sel], plan=cnPlan(d,cnMode());
+  $("cnPrev").innerHTML=plan.changes.length?`<table>${plan.changes.map(c=>`<tr><td class="where">${c.kind==="tx"?"Tx":"Rx"} ${esc(chId(c.el))}${c.dev!==d?` @ ${esc(devName(c.dev))}`:""}</td><td>${esc(c.from)}</td><td class="arrow">→</td><td class="new">${esc(c.to)}</td></tr>`).join("")}</table>`
+    :`<p class="empty-note" style="padding:10px;margin:0">Nothing to change. The names already match.</p>`;
+  const extra=[...plan.notes]; if(plan.renumbered) extra.push("Repeated names get a number added, because Dante needs every channel name on a device to be different.");
+  $("cnNote").innerHTML=extra.map(esc).join("<br>");
+  $("cnGo").disabled=!plan.changes.length;
+  $("cnGo").textContent=plan.changes.length?`Copy ${plan.changes.length} name${plan.changes.length>1?"s":""}`:"Copy names";
+}
+function openCopyNames(){
+  const d=devices()[sel];
+  $("cnSub").textContent=`For ${devName(d)}. You'll see every change before it's made.`;
+  cnDraw(); $("cnDlg").showModal();
+}
+document.querySelectorAll('input[name="cnMode"]').forEach(r=>r.addEventListener("change",cnDraw));
+$("cnCancel").onclick=()=>$("cnDlg").close();
+$("cnForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  const plan=cnPlan(devices()[sel],cnMode()); if(!plan.changes.length) return;
+  const keep=propagate; propagate=true;   // Tx renames must carry their routes with them
+  const tx=plan.changes.filter(c=>c.kind==="tx");
+  // two steps so swapped names (A↔B) don't tangle routes
+  tx.forEach((c,i)=>renameTx(c.dev,c.el,`\u0001tmp${i}`));
+  let moved=0; tx.forEach(c=>moved+=renameTx(c.dev,c.el,c.to));
+  propagate=keep;
+  plan.changes.filter(c=>c.kind==="rx").forEach(c=>setTxt(c.el,"name",c.to));
+  $("cnDlg").close(); markDirty(); render();
+  toast(`Copied ${plan.changes.length} name${plan.changes.length>1?"s":""}${moved?` and updated ${moved} route${moved>1?"s":""}`:""}`);
+});
+
+/* ---------- Build from scratch / add devices ---------- */
+let npRows=[], npMode="new";
+const allTemplates=()=>[...BUILTIN_TEMPLATES,...sessionTemplates];
+const GENERIC_CAPTURE="<captureInfo><device_name/><device_samplerate/><device_encoding/><device_unicast_latency/><txchannel_names/><txflows/><rxchannel_names/><rxchannel_subscriptions/><rxflows/></captureInfo>";
+
+function channelXml(r){
+  const w=Math.max(r.tx,r.rx)>=100?3:2, p=i=>String(i).padStart(w,"0");
+  let s="";
+  for(let i=1;i<=r.tx;i++) s+=`<txchannel danteId="${i}" mediaType="audio"><label>${p(i)}</label></txchannel>`;
+  for(let i=1;i<=r.rx;i++) s+=`<rxchannel danteId="${i}" mediaType="audio"><name>${p(i)}</name></rxchannel>`;
+  return s;
+}
+/* returns a <device> element built in the current doc */
+function buildDevice(r,sr,lat){
+  const P=new DOMParser();
+  let xml;
+  if(r.type<0){
+    xml=`<device>${GENERIC_CAPTURE}<name>${esc(r.name)}</name><friendly_name>${esc(r.name)}</friendly_name><samplerate>${sr}</samplerate><encoding>24</encoding><unicast_latency>${lat||1000}</unicast_latency>${channelXml(r)}</device>`;
+  } else xml=allTemplates()[r.type].xml;
+  const src=P.parseFromString(xml,"application/xml").documentElement;
+  const d=doc.importNode(src,true);
+  // strip whitespace text so we can re-indent uniformly
+  (function strip(n){[...n.childNodes].forEach(c=>{if(c.nodeType===3&&!c.nodeValue.trim())c.remove();else if(c.nodeType===1)strip(c);});})(d);
+  if(r.type>=0){
+    const mk=(tag,val)=>{const e=doc.createElementNS(d.namespaceURI,tag);e.textContent=val;return e;};
+    const ci=kid(d,"captureInfo");
+    const nameEl=mk("name",r.name), defEl=mk("default_name",r.name);
+    d.insertBefore(defEl,ci?ci.nextSibling:d.firstChild); d.insertBefore(nameEl,defEl);
+    const after=kid(d,"device_type_string")||kid(d,"device_type")||kid(d,"model_version_string")||defEl;
+    d.insertBefore(mk("friendly_name",r.name),after.nextSibling);
+    if(kid(d,"samplerate")) setTxt(d,"samplerate",sr);
+    if(lat&&kid(d,"unicast_latency")) setTxt(d,"unicast_latency",lat);
+    const chans=P.parseFromString(`<x>${channelXml(r)}</x>`,"application/xml").documentElement;
+    const before=kid(d,"rtp")||kid(d,"clock")||kid(d,"clock_priority")||null;
+    [...chans.children].forEach(c=>d.insertBefore(doc.importNode(c,true),before));
+  }
+  return d;
+}
+function indent(n,level){
+  const kidsEl=[...n.children]; if(!kidsEl.length) return;
+  const pad="\n"+"    ".repeat(level+1);
+  kidsEl.forEach(c=>{n.insertBefore(doc.createTextNode(pad),c);indent(c,level+1);});
+  n.appendChild(doc.createTextNode("\n"+"    ".repeat(level)));
+}
+function takenNames(skip){
+  const s=new Set(npRows.filter(r=>r!==skip).map(r=>lc(r.name)));
+  if(npMode==="add") devices().forEach(d=>s.add(lc(devName(d))));
+  return s;
+}
+function autoName(r){
+  const base=r.type<0?"Device":allTemplates()[r.type].short;
+  const t=takenNames(r); let i=1; while(t.has(lc(`${base}-${i}`))) i++; return `${base}-${i}`;
+}
+function newRow(type,tx,rx){const r={type,tx,rx,auto:true,name:""};npRows.push(r);r.name=autoName(r);return r;}
+function drawRows(){
+  const tpl=allTemplates();
+  const opts=r=>`<option value="-1" ${r.type<0?'selected':''}>Generic device</option>`+
+    `<optgroup label="Built-in types">${BUILTIN_TEMPLATES.map((t,i)=>`<option value="${i}" ${r.type===i?'selected':''}>${esc(t.label)}</option>`).join("")}</optgroup>`+
+    (sessionTemplates.length?`<optgroup label="From the opened preset">${sessionTemplates.map((t,j)=>{const i=BUILTIN_TEMPLATES.length+j;return `<option value="${i}" ${r.type===i?'selected':''}>${esc(t.label)}</option>`;}).join("")}</optgroup>`:"");
+  $("npBody").innerHTML=npRows.map((r,i)=>`<tr>
+    <td><select data-f="type" data-i="${i}" aria-label="Device ${i+1} type">${opts(r)}</select></td>
+    <td><input class="tape" data-f="name" data-i="${i}" value="${esc(r.name)}" maxlength="31" spellcheck="false" aria-label="Device ${i+1} name"></td>
+    <td><input class="src num" type="number" min="0" max="512" data-f="tx" data-i="${i}" value="${r.tx}" aria-label="Device ${i+1} Tx channels"></td>
+    <td><input class="src num" type="number" min="0" max="512" data-f="rx" data-i="${i}" value="${r.rx}" aria-label="Device ${i+1} Rx channels"></td>
+    <td>${npRows.length>1?`<button type="button" class="clear" data-del="${i}" aria-label="Remove device ${i+1}">✕</button>`:""}</td></tr>`).join("");
+  drawTotal();
+}
+function drawTotal(){
+  const tx=npRows.reduce((a,r)=>a+(+r.tx||0),0), rx=npRows.reduce((a,r)=>a+(+r.rx||0),0);
+  $("npTotal").textContent=`${npRows.length} device${npRows.length>1?"s":""}, ${tx} Tx, ${rx} Rx`;
+}
+async function openNew(mode){
+  if(mode==="new"&&dirty&&!await ask("Discard unsaved changes and start a new preset?")) return;
+  npMode=mode; npRows=[]; newRow(-1,8,8);
+  $("presetFields").hidden=mode==="add";
+  $("dlgTitle").textContent=mode==="add"?"Add devices":"New preset";
+  $("npGo").textContent=mode==="add"?"Add devices":"Create preset";
+  const ref=mode==="add"?devices().find(d=>txt(d,"samplerate")):null;
+  $("npSr").value=(ref&&txt(ref,"samplerate"))||"48000"; if(!$("npSr").value) $("npSr").value="48000";
+  $("npLat").value="";
+  $("npErr").textContent=""; drawRows(); $("newDlg").showModal();
+  $("npBody").querySelector("select")?.focus();
+}
+$("newBtn").onclick=()=>openNew("new"); $("newBtn2").onclick=()=>openNew("new");
+$("addDevBtn").onclick=()=>openNew("add");
+$("npCancel").onclick=()=>$("newDlg").close();
+$("npBody").addEventListener("input",e=>{const el=e.target;if(!el.dataset.f||el.dataset.f==="type")return;
+  const r=npRows[+el.dataset.i];
+  if(el.dataset.f==="name"){r.name=el.value.trim();r.auto=false;} else r[el.dataset.f]=el.value;
+  drawTotal();});
+$("npBody").addEventListener("change",e=>{const el=e.target;if(el.dataset.f!=="type")return;
+  const r=npRows[+el.dataset.i]; r.type=+el.value;
+  if(r.type>=0){const t=allTemplates()[r.type]; r.tx=t.tx; r.rx=t.rx;}
+  if(r.auto) r.name=autoName(r);
+  drawRows(); $("npBody").querySelectorAll("select")[+el.dataset.i].focus();});
+$("npBody").addEventListener("click",e=>{const b=e.target.closest("[data-del]");if(!b)return;npRows.splice(+b.dataset.del,1);drawRows();});
+$("npAddRow").onclick=()=>{const last=npRows[npRows.length-1];
+  newRow(last?last.type:-1,last?last.tx:8,last?last.rx:8); drawRows();
+  const ins=$("npBody").querySelectorAll("input[data-f=name]"); ins[ins.length-1].select();};
+$("newForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  const fail=m=>{$("npErr").textContent=m;};
+  const taken=new Set(npMode==="add"?devices().map(d=>lc(devName(d))):[]);
+  for(const r of npRows){
+    const p=devNameProblem(r.name); if(p) return fail(`${r.name||"Unnamed device"}: ${p}`);
+    if(taken.has(lc(r.name))) return fail(`There's already a device called ${r.name}`); taken.add(lc(r.name));
+    for(const k of ["tx","rx"]){const n=Number(r[k]);
+      if(r[k]===""||!Number.isInteger(n)||n<0||n>512) return fail(`${r.name}: channel counts must be whole numbers from 0 to 512`); r[k]=n;}
+  }
+  const sr=$("npSr").value, lat=$("npLat").value;
+  if(npMode==="new"){
+    const name=$("npName").value.trim()||"New preset";
+    const prevDoc=doc;
+    doc=new DOMParser().parseFromString(`<preset version="3.0.0"><name>${esc(name)}</name><description>${esc($("npDesc").value.trim())}</description></preset>`,"application/xml");
+    for(const r of npRows) root().appendChild(buildDevice(r,sr,lat));
+    indent(root(),0);
+    const text='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+new XMLSerializer().serializeToString(doc)+"\n";
+    doc=prevDoc;
+    if(!load(text,safeFile(name)+".xml")) return fail("Couldn't build that preset.");
+    fileHandle=null; updateTitle();
+    markDirty(); toast(`Created ${name}`);
+  } else {
+    const first=devices().length;
+    const level=1;
+    for(const r of npRows){const d=buildDevice(r,sr,lat); indent(d,level); appendEl(root(),d);}
+    sel=first; view="device"; mxTx=null; markDirty(); render();
+    toast(`Added ${npRows.length} device${npRows.length>1?"s":""}`);
+  }
+  $("newDlg").close();
+});
+</script>
+</body>
+</html>
