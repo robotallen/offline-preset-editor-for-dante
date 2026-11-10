@@ -12,11 +12,11 @@ It is a real desktop app with its own window and Dock or taskbar icon, a native 
 
 | | Direct download |
 |---|---|
-| **Mac** (Apple Silicon and Intel) | [Offline-Preset-Editor-for-Dante-macOS.dmg](https://github.com/robotallen/Dante-Preset-Editor/releases/latest/download/Offline-Preset-Editor-for-Dante-macOS.dmg) |
-| **Windows** installer | [Offline-Preset-Editor-for-Dante-Windows-setup.exe](https://github.com/robotallen/Dante-Preset-Editor/releases/latest/download/Offline-Preset-Editor-for-Dante-Windows-setup.exe) |
-| **Windows** portable (no install) | [Offline-Preset-Editor-for-Dante-Windows-portable.exe](https://github.com/robotallen/Dante-Preset-Editor/releases/latest/download/Offline-Preset-Editor-for-Dante-Windows-portable.exe) |
+| **Mac** (Apple Silicon and Intel) | [Offline-Preset-Editor-for-Dante-macOS.dmg](https://github.com/robotallen/offline-preset-editor-for-dante/releases/latest/download/Offline-Preset-Editor-for-Dante-macOS.dmg) |
+| **Windows** installer | [Offline-Preset-Editor-for-Dante-Windows-setup.exe](https://github.com/robotallen/offline-preset-editor-for-dante/releases/latest/download/Offline-Preset-Editor-for-Dante-Windows-setup.exe) |
+| **Windows** portable (no install) | [Offline-Preset-Editor-for-Dante-Windows-portable.exe](https://github.com/robotallen/offline-preset-editor-for-dante/releases/latest/download/Offline-Preset-Editor-for-Dante-Windows-portable.exe) |
 
-All releases: <https://github.com/robotallen/Dante-Preset-Editor/releases>. The app isn't code-signed yet, so see **First launch** below for the one-off warning on each platform.
+All releases: <https://github.com/robotallen/offline-preset-editor-for-dante/releases>. The app isn't code-signed yet, so see **First launch** below for the one-off warning on each platform.
 
 ## Support
 
