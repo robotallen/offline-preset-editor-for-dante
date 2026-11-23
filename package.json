@@ -1,6 +1,6 @@
 {
   "name": "offline-preset-editor-for-dante",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Offline Preset Editor for Dante as a desktop app for macOS and Windows",
   "scripts": {

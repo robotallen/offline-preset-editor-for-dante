@@ -11,6 +11,7 @@
 //! The page calls the #[tauri::command] functions below with window.__TAURI__.core.invoke(...)
 //! and listens for the events "menu", "open-paths" and "close-requested".
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -19,18 +20,35 @@ use tauri::menu::{AboutMetadataBuilder, Menu, MenuItem, PredefinedMenuItem, Subm
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewWindow, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
-/// Files we were asked to open before the page was ready, and whether the page is listening yet.
+/// Files we were asked to open before the page was ready, whether the page is listening yet,
+/// and the files the user has chosen. read_file and write_file only touch chosen files, so a
+/// script that gets into the page (say, from a booby-trapped preset) can't read or write
+/// anything else on the computer.
 #[derive(Default)]
 struct AppState {
     pending: Mutex<Vec<String>>,
     ready: AtomicBool,
+    allowed: Mutex<HashSet<String>>,
+}
+
+impl AppState {
+    fn allow(&self, path: &str) {
+        self.allowed.lock().unwrap().insert(path.to_owned());
+    }
+    fn check(&self, path: &str) -> Result<(), String> {
+        if self.allowed.lock().unwrap().contains(path) {
+            Ok(())
+        } else {
+            Err("That file wasn't chosen in an Open or Save dialog".into())
+        }
+    }
 }
 
 // ---------- commands called from the page ----------
 
 /// Show the native Open dialog. Returns the chosen path, or None if cancelled.
 #[tauri::command]
-async fn open_dialog(app: AppHandle, dir: Option<String>) -> Result<Option<String>, String> {
+async fn open_dialog(app: AppHandle, state: tauri::State<'_, AppState>, dir: Option<String>) -> Result<Option<String>, String> {
     let mut d = app
         .dialog()
         .file()
@@ -41,13 +59,22 @@ async fn open_dialog(app: AppHandle, dir: Option<String>) -> Result<Option<Strin
     }
     match d.blocking_pick_file() {
         None => Ok(None),
-        Some(fp) => Ok(Some(fp.into_path().map_err(|e| e.to_string())?.to_string_lossy().into_owned())),
+        Some(fp) => {
+            let p = fp.into_path().map_err(|e| e.to_string())?.to_string_lossy().into_owned();
+            state.allow(&p);
+            Ok(Some(p))
+        }
     }
 }
 
-/// Show the native Save dialog. Returns the chosen path, or None if cancelled.
+/// Show the native Save dialog. Returns the chosen path (with .xml added if missing), or None if cancelled.
 #[tauri::command]
-async fn save_dialog(app: AppHandle, suggested: String, dir: Option<String>) -> Result<Option<String>, String> {
+async fn save_dialog(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    suggested: String,
+    dir: Option<String>,
+) -> Result<Option<String>, String> {
     let mut d = app
         .dialog()
         .file()
@@ -59,18 +86,27 @@ async fn save_dialog(app: AppHandle, suggested: String, dir: Option<String>) -> 
     }
     match d.blocking_save_file() {
         None => Ok(None),
-        Some(fp) => Ok(Some(fp.into_path().map_err(|e| e.to_string())?.to_string_lossy().into_owned())),
+        Some(fp) => {
+            let mut p = fp.into_path().map_err(|e| e.to_string())?.to_string_lossy().into_owned();
+            if !p.to_lowercase().ends_with(".xml") {
+                p.push_str(".xml");
+            }
+            state.allow(&p);
+            Ok(Some(p))
+        }
     }
 }
 
 #[tauri::command]
-async fn read_file(path: String) -> Result<String, String> {
+async fn read_file(state: tauri::State<'_, AppState>, path: String) -> Result<String, String> {
+    state.check(&path)?;
     std::fs::read_to_string(&path).map_err(|e| format!("{e}"))
 }
 
 /// Write via a temporary file and rename, so a failed save never leaves a half-written preset.
 #[tauri::command]
-async fn write_file(path: String, contents: String) -> Result<(), String> {
+async fn write_file(state: tauri::State<'_, AppState>, path: String, contents: String) -> Result<(), String> {
+    state.check(&path)?;
     let target = PathBuf::from(&path);
     let mut tmp = target.clone();
     tmp.set_extension("xml.saving");
@@ -118,6 +154,9 @@ fn deliver_paths(app: &AppHandle, paths: Vec<String>) {
         return;
     }
     let state = app.state::<AppState>();
+    for p in &paths {
+        state.allow(p);
+    }
     if state.ready.load(Ordering::SeqCst) {
         let _ = app.emit("open-paths", paths);
         if let Some(w) = app.get_webview_window("main") {
@@ -277,7 +316,11 @@ pub fn run() {
         })
         .setup(|app| {
             let args = startup_args();
-            app.state::<AppState>().pending.lock().unwrap().extend(args);
+            let state = app.state::<AppState>();
+            for a in &args {
+                state.allow(a);
+            }
+            state.pending.lock().unwrap().extend(args);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

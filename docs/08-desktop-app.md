@@ -16,9 +16,9 @@ The user asked for an Xcode app that would also run on Windows. Xcode can't do t
  src/index.html  (editor UI, JS)                       src-tauri/src/lib.rs  (Rust)
  ─────────────────────────────────                     ─────────────────────────────
  invoke("open_dialog",{dir})            ───────────▶   native Open dialog → path | null
- invoke("save_dialog",{suggested,dir})  ───────────▶   native Save dialog → path | null
- invoke("read_file",{path})             ───────────▶   read text
- invoke("write_file",{path,contents})   ───────────▶   write via temp file + rename (atomic)
+ invoke("save_dialog",{suggested,dir})  ───────────▶   native Save dialog → path (.xml added) | null
+ invoke("read_file",{path})             ───────────▶   read text (chosen files only, see below)
+ invoke("write_file",{path,contents})   ───────────▶   write via temp file + rename (atomic; chosen files only)
  invoke("ask_dialog",{message})         ───────────▶   native OK/Cancel → bool
  invoke("set_title",{title})            ───────────▶   window title ("• file.xml – …" when unsaved)
  invoke("frontend_ready")               ───────────▶   marks the page as listening; returns files the app was launched with
@@ -30,6 +30,12 @@ The user asked for an Xcode app that would also run on Windows. Xcode can't do t
 ```
 
 `withGlobalTauri: true` exposes `window.__TAURI__` to the page, so there's no JS bundler or npm packages in the front end. The page detects the app with `const APP = !!(window.__TAURI__ && window.__TAURI__.core)`.
+
+### Security
+A preset is a file someone else may have sent you, so the page treats its contents as untrusted:
+- **Everything from the file is escaped** with `esc()` before it goes into the page's HTML, including attributes such as `<interface network="…">` and values shown in dropdowns. `tests/run-tests.js` has a test that loads a booby-trapped preset.
+- **Content Security Policy** in `tauri.conf.json` only allows the page's own script (Tauri adds its hash at build time), so an injected `onerror=` or `<script>` won't run. `style-src` is left out of Tauri's automatic hashing (`dangerousDisableAssetCspModification`) because adding a hash would make the browser ignore `'unsafe-inline'` and break the page's `style="…"` attributes.
+- **`read_file` and `write_file` only accept files the user chose**: from the Open or Save dialog, the launch command line, a drop onto the window, or Finder "Open With". Anything else is refused, so even a script that got in couldn't touch other files.
 
 ### In the page (`src/index.html`, section "Files: open, save over, save as")
 - **The open file** is kept as `fileHandle = {name, read(), write(text), path?|handle?}`, made by `nativeFile(path)` (app) or `webFile(handle)` (Chrome/Edge). Save, Save as, Revert and the title code work the same in every mode.

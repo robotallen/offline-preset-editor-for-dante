@@ -353,7 +353,7 @@ let view="overview", exTx=new Set(), exRx=new Set(), ovFilter="";
 let sessionTemplates=[];
 
 const $=id=>document.getElementById(id);
-const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const lc=s=>(s||"").toLowerCase();
 
 /* ---------- XML helpers (direct children only) ---------- */
@@ -615,7 +615,7 @@ function renderInfo(){
     <td class="nm">${v.perDev.get(d)?'<span class="warnDot" title="Has problems"></span>':''}${esc(devName(d))}</td>
     <td>${cell(txt(d,"manufacturer_name"))}</td><td>${txt(d,"model_name")?esc(txt(d,"model_name")):"Generic"}</td>
     <td>${cell(txt(d,"device_type_string"))}</td><td>${cell(txt(d,"model_version"))}</td>
-    <td class="num">${cell(txt(d,"samplerate"),x=>`${x/1000} kHz`)}</td><td class="num">${cell(txt(d,"encoding"),x=>`${x}-bit`)}</td>
+    <td class="num">${cell(txt(d,"samplerate"),x=>`${x/1000} kHz`)}</td><td class="num">${cell(txt(d,"encoding"),x=>`${esc(x)}-bit`)}</td>
     <td class="num">${cell(txt(d,"unicast_latency"),x=>`${x/1000} ms`)}</td>
     <td>${leaderOf(d)?'<span class="pill">Preferred Leader</span>':""}</td>
     <td>${kid(d,"redundancy")?(isTrue(kid(d,"redundancy").getAttribute("value"))?"Redundant":"Switched"):na}</td>
@@ -827,7 +827,7 @@ const SR=[44100,48000,88200,96000,176400,192000], ENC=[16,24,32], LAT=[250,500,1
 
 function selRow(label,path,kind,opts,cur,fmt){
   const list=opts.map(String); if(cur&&!list.includes(cur)) list.push(cur);
-  return `<label class="srow"><span>${label}</span><select data-path="${path}" data-kind="${kind}">${list.map(o=>`<option value="${o}" ${o===cur?'selected':''}>${fmt(o)}</option>`).join("")}</select></label>`;
+  return `<label class="srow"><span>${label}</span><select data-path="${path}" data-kind="${kind}">${list.map(o=>`<option value="${esc(o)}" ${o===cur?'selected':''}>${esc(fmt(o))}</option>`).join("")}</select></label>`;
 }
 const chkRow=(label,path,kind,on)=>`<label class="srow"><span>${label}</span><input type="checkbox" data-path="${path}" data-kind="${kind}" ${on?'checked':''}></label>`;
 const txtRow=(label,path,kind,v,type="text")=>`<label class="srow"><span>${label}</span><input type="${type}" data-path="${path}" data-kind="${kind}" value="${esc(v)}" spellcheck="false"></label>`;
@@ -913,11 +913,11 @@ function settingsView(d,part="config"){
   const ifs=kids(d,"interface");
   ifs.forEach((i,ix)=>{
     const net=i.getAttribute("network"), v=ipVals(i), st=v.mode==="static";
-    n+=`<div class="ipblock"><label class="srow"><span>${ifaceName(net)} IP</span><select data-ipmode="${ix}">
+    n+=`<div class="ipblock"><label class="srow"><span>${esc(ifaceName(net))} IP</span><select data-ipmode="${ix}">
       <option value="dynamic" ${st?'':'selected'}>Automatic (DHCP)</option><option value="static" ${st?'selected':''}>Static</option></select></label>`;
     if(st) IPF.forEach(([f,label,req])=>{
       const val=v[f], bad=val?(f==="netmask"?!maskOk(val):!ipOk(val)):req;
-      n+=`<label class="srow sub"><span>${label}${req?'':' <small>(optional)</small>'}</span><input type="text" inputmode="decimal" spellcheck="false" data-ipf="${ix}" data-f="${f}" value="${esc(val)}" placeholder="${f==="netmask"?"255.255.255.0":"0.0.0.0"}" class="${bad?'bad':''}" aria-label="${ifaceName(net)} ${label}"></label>`;
+      n+=`<label class="srow sub"><span>${label}${req?'':' <small>(optional)</small>'}</span><input type="text" inputmode="decimal" spellcheck="false" data-ipf="${ix}" data-f="${f}" value="${esc(val)}" placeholder="${f==="netmask"?"255.255.255.0":"0.0.0.0"}" class="${bad?'bad':''}" aria-label="${esc(ifaceName(net))} ${label}"></label>`;
     });
     if(!st) n+=`<p class="note">Dante Controller won't switch a device from static back to DHCP with a preset. If this device is currently static, change it in Device View → Network Config instead.</p>`;
     n+=`</div>`;
@@ -1093,7 +1093,7 @@ async function save(){
 }
 async function saveAs(checked){
   if(!doc||(!checked&&!await checkErrors())) return;
-  const text=serialize(), suggested=fileHandle?fileHandle.name:(fileName||outName());
+  const text=serialize(), suggested=fileHandle?fileHandle.name:fileName;
   if(APP){
     try{
       let p=await invoke("save_dialog",{suggested,dir:fileHandle&&fileHandle.path?dirName(fileHandle.path):null});
@@ -1154,7 +1154,6 @@ function serialize(){
   return decl+"\n"+s+"\n";
 }
 const safeFile=n=>n.replace(/[\\/:*?"<>|]+/g,"_");
-function outName(){const n=txt(root(),"name").trim(); return n?safeFile(n)+".xml":fileName;}
 $("copyBtn").onclick=async()=>{
   const s=serialize();
   try{await navigator.clipboard.writeText(s);toast("XML copied");}

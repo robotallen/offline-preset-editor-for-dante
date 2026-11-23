@@ -1,5 +1,5 @@
 // Headless test suite for src/index.html
-// Run:  cd tests && npm install && npm test
+// Run from the project folder:  npm install && npm test
 // Uses jsdom to load the real HTML file and drive it through its own UI.
 "use strict";
 const { JSDOM } = require("jsdom");
@@ -209,6 +209,24 @@ function app({ fsApi = false } = {}) {
     ok(!!disk["/presets/copy.xml"] && d.getElementById("fileLabel").textContent === "copy.xml", "File > Save As adds .xml and switches to the new file");
     calls.length = 0; listeners["close-requested"]({}); await tick();
     ok(calls.includes("close_app") && !calls.includes("ask_dialog"), "closing with everything saved closes straight away");
+  }
+
+  console.log("\nUntrusted presets");
+  {
+    // values from the file must never be able to add HTML (and so script) to the page
+    const a = app(); const { d } = a;
+    const evil = `<?xml version="1.0"?><preset version="3.0.0"><name>x</name><device><name>A</name><friendly_name>A</friendly_name>` +
+      `<samplerate>48000&lt;img id=pwn1&gt;</samplerate><encoding>24&lt;img id=pwn2&gt;</encoding>` +
+      `<interface network="9&quot;&gt;&lt;img id=pwn3&gt;"><ipv4_address mode="static"><address>10.0.0.5</address><netmask>255.255.255.0</netmask></ipv4_address></interface></device></preset>`;
+    ok(a.load(evil, "evil.xml"), "loads a preset with HTML hidden in its values");
+    const pwned = () => !!d.querySelector("[id^=pwn]");
+    d.getElementById("infoBtn").click();
+    ok(!pwned(), "Device Info doesn't turn file values into HTML");
+    d.querySelector("#devList li").click();
+    d.querySelector("[data-tab='settings']").click();
+    ok(!pwned(), "Device Config doesn't turn file values into HTML");
+    d.querySelector("[data-tab='network']").click();
+    ok(!pwned() && /Interface 9"><img id=pwn3> IP/.test(d.getElementById("work").textContent), "Network Config shows an odd interface name as text");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

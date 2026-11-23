@@ -1,6 +1,6 @@
 [package]
 name = "dante-preset-editor"
-version = "1.0.0"
+version = "0.1.0"
 description = "Offline editor for Audinate Dante Controller preset files"
 edition = "2021"
 

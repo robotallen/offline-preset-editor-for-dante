@@ -62,6 +62,8 @@ jobs:
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: ${{ steps.proj.outputs.dir }}
           tauriScript: npx tauri
